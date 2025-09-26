@@ -58,7 +58,7 @@ def delete_chat_history(session_id_to_delete):
 
 
 # --- 2. モデルの選択 ---
-model = genai.GenerativeModel('models/gemini-1.5-pro')
+model = genai.GenerativeModel('models/gemini-1.5-flash')
 
 # --- 3. Streamlitアプリのタイトル設定 ---
 st.title("誘いを断る練習AI")
@@ -221,6 +221,7 @@ else:
             if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
                 delete_chat_history(log['session_id'])
                 st.rerun() # 削除後にページをリロードして表示を更新
+
 
 
 
