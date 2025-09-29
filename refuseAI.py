@@ -3,7 +3,8 @@ import google.generativeai as genai
 import os
 import time
 import json
-import uuidimport streamlit as st
+import streamlit as st
+import uuid
 import google.generativeai as genai
 import os
 import time
@@ -461,6 +462,7 @@ else:
             if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
                 delete_chat_history(log['session_id'])
                 st.rerun() # 削除後にページをリロードして表示を更新
+
 
 
 
