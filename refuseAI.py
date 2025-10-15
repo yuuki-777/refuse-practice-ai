@@ -115,7 +115,7 @@ system_prompt_template = """
 ・相手との関係性に応じた適切さ:
     ・相手が目上の人の場合、直接的な断り表現になっていないか、適切な敬語が使用されているか。
     ・相手が親しい関係の場合、フランクで自然な表現か。
-・全体的な丁寧さ、配慮が感じられるか。
+・謝罪の言葉の有無と適切さ。
 ・文法的な正確さ、自然な言い回しか。
 
 内容面（断りの理由、代替案など）：
@@ -238,6 +238,7 @@ else:
             if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
                 delete_chat_history(log['session_id'])
                 st.rerun()
+
 
 
 
