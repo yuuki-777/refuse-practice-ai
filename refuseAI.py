@@ -3,7 +3,7 @@ import google.generativeai as genai
 import os
 import time
 import json
-import uuid　
+import uuid
 import re
 
 # --- 1. APIキーの設定 ---
@@ -431,5 +431,6 @@ else:
             if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
                 delete_chat_history(log['session_id'])
                 st.rerun()
+
 
 
