@@ -15,7 +15,7 @@ else:
 # --- ログファイルのパス ---
 CHAT_LOG_FILE = "chat_logs.json"
 
-# --- 履歴管理関数 ---
+# --- 履歴管理関数 (省略) ---
 def save_chat_history(history):
     if os.path.exists(CHAT_LOG_FILE):
         with open(CHAT_LOG_FILE, "r", encoding="utf-8") as f:
@@ -25,7 +25,6 @@ def save_chat_history(history):
                 logs = []
     else:
         logs = []
-
     session_data = {
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
         "session_id": str(uuid.uuid4()),
@@ -63,21 +62,20 @@ st.title("誘いを断る練習AI")
 st.write("断ることが苦手なあなたのための、コミュニケーション練習アプリです。AIからの誘いを断ってみましょう！")
 
 
-# --- 練習要素の定義 (両モードで使用) ---
+# ★★★ 修正箇所：training_elements の定義 ★★★
+# --- 練習要素の定義 (要素別トレーニング用: 6要素) ---
 training_elements = {
-    "相手との関係性に応じた適切さ (1点)": "表現面：相手との関係性に応じた適切な言葉遣い、敬語、直接的な断り表現を避けているか。",
-    "謝罪の言葉の有無と適切さ (1点)": "表現面：謝罪の言葉が適切に使われているか。",
-    "全体的な丁寧さ、配慮 (1点)": "表現面：全体的な丁寧さ、相手への気遣いが感じられるか。",
-    "文法的な正確さ、自然な言い回し (2点)": "表現面：文法的な誤りがなく、より自然で適切な言い回しか。",
-    "断りの意思の明確さ (1点)": "内容面：曖昧さがなく、断りの意思がはっきりと伝わるか。",
-    "理由の提示の有無と適切さ (1点)": "内容面：納得できる理由か、具体性があるか。",
-    "代替案の提示の有無と適切さ (1点)": "内容面：別の機会や方法を提案しているか。",
-    "相手への配慮 (感謝の言葉など) (1点)": "内容面：相手の誘い自体を否定せず、感謝の言葉があるか。",
-    "内容の一貫性 (1点)": "内容面：断りの内容が矛盾していないか。"
+    "相手との関係性に応じた適切さ ": "表現面：相手との関係性に応じた適切な言葉遣い、敬語、直接的な断り表現を避けているか。",
+    "謝罪の言葉の有無と適切さ ": "表現面：謝罪の言葉が適切に使われているか。",
+    "断りの意思の明確さ ": "内容面：曖昧さがなく、断りの意思がはっきりと伝わるか。",
+    "理由の提示の有無と適切さ ": "内容面：納得できる理由か、具体性があるか。",
+    "代替案の提示の有無と適切さ ": "内容面：別の機会や方法を提案しているか。",
+    "相手への配慮 (感謝の言葉など) ": "内容面：相手の誘い自体を否定せず、感謝の言葉があるか。",
 }
+# ★★★ 修正箇所 ここまで ★★★
 
 
-# --- 4. UIの配置とモード選択 ---
+# --- 4. UIの配置とモード選択 (変更なし) ---
 st.subheader("練習モードの選択とシナリオ設定")
 
 # 練習モードの選択
@@ -94,7 +92,7 @@ if practice_mode == '要素別トレーニング (一点集中)':
     # 要素を選択させる
     selected_element = st.selectbox(
         "▼ 集中して練習する要素を選択",
-        list(training_elements.keys()),
+        list(training_elements.keys()), # 6要素のみが表示される
         key='training_element_select'
     )
     st.markdown(f"**目標**: *{training_elements[selected_element]}*")
@@ -112,7 +110,7 @@ start_button_disabled = not scenario_input
 start_button = st.button("3. 練習を開始する", disabled=start_button_disabled, key="start_button")
 
 
-# --- 5. チャット履歴とGeminiチャットオブジェクトの初期化 ---
+# --- 5. チャット履歴とGeminiチャットオブジェクトの初期化 (変更なし) ---
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
     st.session_state.genai_chat = model.start_chat(history=[])
@@ -122,7 +120,7 @@ if "chat_history" not in st.session_state:
 
 # --- 6. システムプロンプトの設定 (テンプレート) ---
 
-# --- 総合実践モード用の詳細なプロンプトテンプレート (完全版) ---
+# --- 総合実践モード用の詳細なプロンプトテンプレート (9要素評価のまま維持) ---
 SYSTEM_PROMPT_FULL_TEMPLATE = f"""
 あなたはユーザーが誘いを断る練習をするためのロールプレイング相手です。
 
@@ -177,14 +175,12 @@ SYSTEM_PROMPT_FULL_TEMPLATE = f"""
 ... (中略) ...
 """
 
-# --- 要素別トレーニング用プロンプト生成関数 ---
+# --- 要素別トレーニング用プロンプト生成関数 (変更なし) ---
 def create_focused_prompt(element_key, element_description):
     """選択された要素に特化したフィードバックプロンプトを生成する関数 (点数評価なし)"""
     
-    # 配点情報を抽出
     score_info = element_description.split('(')[-1].replace(')', '')
     
-    # 強調プロンプトを作成
     focused_prompt = f"""
 あなたはユーザーが特定の要素を練習するためのコーチです。
 あなたの役割は、ユーザーが断りの練習をする際、冷静にフィードバックを提供することです。
@@ -239,12 +235,12 @@ if st.session_state.get("current_scenario") != scenario_input or (start_button a
         st.session_state.current_scenario = scenario_input
         st.rerun()
 
-# --- 8. 会話履歴の表示 ---
+# --- 8. 会話履歴の表示 (変更なし) ---
 for message in st.session_state.chat_history:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- 9. ユーザー入力の処理 ---
+# --- 9. ユーザー入力の処理 (変更なし) ---
 user_input = st.chat_input("あなたの断り言葉を入力してください")
 
 if user_input:
@@ -261,14 +257,14 @@ if user_input:
     time.sleep(1)
     st.rerun()
 
-# 履歴を保存するボタン
+# 履歴を保存するボタン (変更なし)
 if st.button("現在の会話履歴を保存", key="save_button"):
     if st.session_state.chat_history:
         save_chat_history(st.session_state.chat_history)
     else:
         st.warning("保存する会話履歴がありません。")
 
-# 会話リセットボタン
+# 会話リセットボタン (変更なし)
 if st.button("新しいシナリオで練習する", key="reset_button"):
     st.session_state.chat_history = []
     st.session_state.genai_chat = model.start_chat(history=[])
@@ -277,7 +273,7 @@ if st.button("新しいシナリオで練習する", key="reset_button"):
     st.rerun()
 
 
-# --- 履歴の閲覧セクション ---
+# --- 履歴の閲覧セクション (変更なし) ---
 st.subheader("これまでの練習履歴")
 
 all_histories = load_all_chat_histories()
