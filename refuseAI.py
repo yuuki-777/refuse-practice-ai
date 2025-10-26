@@ -4,7 +4,7 @@ import os
 import time
 import json
 import uuid
-import re # 合否判定の抽出に使用
+import re
 
 # --- 1. APIキーの設定 ---
 if "GOOGLE_API_KEY" in st.secrets:
@@ -431,3 +431,4 @@ else:
             if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
                 delete_chat_history(log['session_id'])
                 st.rerun()
+
