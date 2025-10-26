@@ -81,136 +81,9 @@ training_elements = {
     "相手への配慮 (感謝の言葉など) (1点)": "内容面：相手の誘い自体を否定せず、感謝の言葉があるか。",
 }
 
+# --- 6. システムプロンプトの設定 (テンプレート) **【このセクションを上に移動】** ---
 
-# --- 4. UIの配置とモード選択 ---
-
-# --- セッションステートの初期化 ---
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
-    st.session_state.genai_chat = model.start_chat(history=[])
-    st.session_state.initial_prompt_sent = False
-    st.session_state.current_scenario = None
-    # ★★★ 修正箇所: 要素別トレーニングの合格状況を管理 ★★★
-    st.session_state.element_status = {key: False for key in training_elements.keys()}
-
-# 進捗状況の計算
-all_elements_passed = all(st.session_state.element_status.values())
-
-st.subheader("練習モードの選択とシナリオ設定")
-
-# 練習モードの選択 (ロック機能の実装)
-if all_elements_passed:
-    st.success("🎉 すべての要素を合格しました！総合実践モードが解放されました。")
-    mode_options = ('総合実践 (全要素を評価)', '要素別トレーニング (一点集中)')
-else:
-    st.warning("総合実践は、すべての要素別トレーニング（6要素）を合格後に解放されます。")
-    mode_options = ('総合実践 (ロック中)', '要素別トレーニング (一点集中)')
-
-# 過去に選択されていたモードを記憶
-initial_index = 1 
-if 'practice_mode_select' in st.session_state:
-    try:
-        initial_index = mode_options.index(st.session_state.practice_mode_select)
-    except ValueError:
-        # ロック中に総合実践が選択されていた場合、要素別トレーニングにリセット
-        initial_index = 1
-
-practice_mode = st.radio(
-    "1. 練習モードを選択してください:",
-    mode_options,
-    index=initial_index,
-    key='practice_mode_select'
-)
-
-# ロック中のモード選択を無効化
-if not all_elements_passed and practice_mode == '総合実践 (ロック中)':
-    # 選択されてしまった場合、要素別トレーニングに強制的に切り替え
-    practice_mode = '要素別トレーニング (一点集中)'
-    # UI上のラジオボタンの見た目は変わらないが、内部ロジックで制御
-
-# ★★★ 進捗状況の表示 ★★★
-st.markdown("---")
-st.markdown("### 🏆 要素別トレーニングの進捗")
-cols = st.columns(3)
-element_keys = list(training_elements.keys())
-for i, key in enumerate(element_keys):
-    passed = st.session_state.element_status[key]
-    icon = "✅" if passed else "❌"
-    cols[i % 3].markdown(f"**{icon} {key.split(' (')[0]}**")
-st.markdown("---")
-
-
-selected_element = ""
-if practice_mode == '要素別トレーニング (一点集中)':
-    st.info("練習したい要素を一つ選んでください。合格を目指しましょう！")
-    # 合格済みの要素は選択肢の末尾に移動させる
-    available_elements = [k for k, v in st.session_state.element_status.items() if not v]
-    passed_elements = [k for k, v in st.session_state.element_status.items() if v]
-    
-    # 選択肢の表示
-    display_options = available_elements + [f"{e} (✅ 合格済み)" for e in passed_elements]
-    # 要素のキーを抽出するため、合格済みマークを削除したリストを作成
-    key_options = available_elements + passed_elements
-
-    if not key_options:
-        st.success("すべての要素を合格しました！総合実践モードへ進んでください。")
-        selected_element = list(training_elements.keys())[0] # ダミーで一つ選択
-    else:
-        # ユーザーが選択した表示テキストを取得
-        selected_display_text = st.selectbox(
-            "▼ 集中して練習する要素を選択",
-            display_options,
-            key='training_element_select_display'
-        )
-        # 実際のキーを特定 (合格済みマークを削除)
-        selected_element_index = display_options.index(selected_display_text)
-        selected_element = key_options[selected_element_index]
-        
-    st.markdown(f"**目標**: *{training_elements[selected_element]}*")
-
-
-# ユーザーがシナリオを入力するUI
-scenario_input = st.text_area(
-    "2. 練習したいシナリオの内容を具体的に入力してください（例：会社の先輩、飲み会の誘い、断りにくさのレベルは中くらい）",
-    height=100,
-    key="scenario_input"
-)
-
-start_button_disabled = not scenario_input or (practice_mode == '要素別トレーニング (一点集中)' and not selected_element)
-start_button = st.button("3. 練習を開始する", disabled=start_button_disabled, key="start_button")
-
-
-# --- 5. チャット履歴とGeminiチャットオブジェクトの初期化 ---
-if st.session_state.get("current_scenario") != scenario_input or (start_button and not st.session_state.initial_prompt_sent):
-    
-    st.session_state.chat_history = []
-    st.session_state.genai_chat = model.start_chat(history=[])
-    
-    scenario_text = f"**ユーザーが設定したシナリオ:** {scenario_input}"
-    
-    if practice_mode == '要素別トレーニング (一点集中)':
-        # 選択された要素がキーとして必要
-        element_key_for_prompt = selected_element 
-        if element_key_for_prompt:
-            combined_prompt = create_focused_prompt(element_key_for_prompt, training_elements[element_key_for_prompt])
-            combined_prompt += f"\n\n{scenario_text}"
-        else:
-            st.error("練習する要素を選択してください。")
-            st.stop()
-        
-    else: # 総合実践 (全要素を評価)
-        combined_prompt = f"{SYSTEM_PROMPT_FULL_TEMPLATE}\n\n{scenario_text}"
-        
-    with st.spinner("AIが誘いを考えています..."):
-        initial_response = st.session_state.genai_chat.send_message(combined_prompt)
-        st.session_state.chat_history.append({"role": "assistant", "content": initial_response.text})
-        st.session_state.initial_prompt_sent = True
-        st.session_state.current_scenario = scenario_input
-        st.rerun()
-
-# --- 6. システムプロンプトの設定 (テンプレート) ---
-
-# --- 総合実践モード用の詳細なプロンプトテンプレート (変更なし) ---
+# --- 総合実践モード用の詳細なプロンプトテンプレート ---
 SYSTEM_PROMPT_FULL_TEMPLATE = f"""
 あなたはユーザーが誘いを断る練習をするためのロールプレイング相手です。
 
@@ -301,10 +174,108 @@ def create_focused_prompt(element_key, element_description):
 2. その部分を、**太字と斜体、下線**でマークアップ（_**...**_）してください。
 3. その後に、通常の評価と改善提案を続けてください。
 4. フィードバックの**末尾に**、以下の厳密な形式で合否判定を必ず追加してください。
-   - 基準: ユーザーの断り方が、この要素の基準を完全に満たした場合のみ「合格」としてください。少しでも改善の余地がある場合は「不合格」です。
-   - 形式: 【合否判定】: 合格 または 【合否判定】: 不合格
+    - 基準: ユーザーの断り方が、この要素の基準を完全に満たした場合のみ「合格」としてください。少しでも改善の余地がある場合は「不合格」です。
+    - 形式: 【合否判定】: 合格 または 【合否判定】: 不合格
 """
     return focused_prompt
+
+
+# --- 4. UIの配置とモード選択 ---
+
+# --- セッションステートの初期化 ---
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+    st.session_state.genai_chat = model.start_chat(history=[])
+    st.session_state.initial_prompt_sent = False
+    st.session_state.current_scenario = None
+    # 要素別トレーニングの合格状況を管理
+    st.session_state.element_status = {key: False for key in training_elements.keys()}
+
+# 進捗状況の計算
+all_elements_passed = all(st.session_state.element_status.values())
+
+st.subheader("練習モードの選択とシナリオ設定")
+
+# 練習モードの選択 (ロック機能の実装)
+if all_elements_passed:
+    st.success("🎉 すべての要素を合格しました！総合実践モードが解放されました。")
+    mode_options = ('総合実践 (全要素を評価)', '要素別トレーニング (一点集中)')
+else:
+    st.warning("総合実践は、すべての要素別トレーニング（6要素）を合格後に解放されます。")
+    mode_options = ('総合実践 (ロック中)', '要素別トレーニング (一点集中)')
+
+# 過去に選択されていたモードを記憶
+initial_index = 1 
+if 'practice_mode_select' in st.session_state:
+    try:
+        initial_index = mode_options.index(st.session_state.practice_mode_select)
+    except ValueError:
+        # ロック中に総合実践が選択されていた場合、要素別トレーニングにリセット
+        initial_index = 1
+
+practice_mode = st.radio(
+    "1. 練習モードを選択してください:",
+    mode_options,
+    index=initial_index,
+    key='practice_mode_select'
+)
+
+# ロック中のモード選択を無効化
+if not all_elements_passed and practice_mode == '総合実践 (ロック中)':
+    # 選択されてしまった場合、要素別トレーニングに強制的に切り替え
+    practice_mode = '要素別トレーニング (一点集中)'
+    # UI上のラジオボタンの見た目は変わらないが、内部ロジックで制御
+
+# 進捗状況の表示
+st.markdown("---")
+st.markdown("### 🏆 要素別トレーニングの進捗")
+cols = st.columns(3)
+element_keys = list(training_elements.keys())
+for i, key in enumerate(element_keys):
+    passed = st.session_state.element_status[key]
+    icon = "✅" if passed else "❌"
+    cols[i % 3].markdown(f"**{icon} {key.split(' (')[0]}**")
+st.markdown("---")
+
+
+selected_element = ""
+if practice_mode == '要素別トレーニング (一点集中)':
+    st.info("練習したい要素を一つ選んでください。合格を目指しましょう！")
+    # 合格済みの要素は選択肢の末尾に移動させる
+    available_elements = [k for k, v in st.session_state.element_status.items() if not v]
+    passed_elements = [k for k, v in st.session_state.element_status.items() if v]
+    
+    # 選択肢の表示
+    display_options = available_elements + [f"{e} (✅ 合格済み)" for e in passed_elements]
+    # 要素のキーを抽出するため、合格済みマークを削除したリストを作成
+    key_options = available_elements + passed_elements
+
+    if not key_options:
+        st.success("すべての要素を合格しました！総合実践モードへ進んでください。")
+        selected_element = list(training_elements.keys())[0] # ダミーで一つ選択
+    else:
+        # ユーザーが選択した表示テキストを取得
+        selected_display_text = st.selectbox(
+            "▼ 集中して練習する要素を選択",
+            display_options,
+            key='training_element_select_display'
+        )
+        # 実際のキーを特定 (合格済みマークを削除)
+        selected_element_index = display_options.index(selected_display_text)
+        selected_element = key_options[selected_element_index]
+        
+    st.markdown(f"**目標**: *{training_elements[selected_element]}*")
+
+
+# ユーザーがシナリオを入力するUI
+scenario_input = st.text_area(
+    "2. 練習したいシナリオの内容を具体的に入力してください（例：会社の先輩、飲み会の誘い、断りにくさのレベルは中くらい）",
+    height=100,
+    key="scenario_input"
+)
+
+start_button_disabled = not scenario_input or (practice_mode == '要素別トレーニング (一点集中)' and not selected_element)
+start_button = st.button("3. 練習を開始する", disabled=start_button_disabled, key="start_button")
 
 
 # --- 7. AIからの最初の誘いを生成し表示 (ロジック分岐) ---
@@ -318,6 +289,7 @@ if st.session_state.get("current_scenario") != scenario_input or (start_button a
     if practice_mode == '要素別トレーニング (一点集中)':
         element_key_for_prompt = selected_element 
         if element_key_for_prompt:
+            # create_focused_prompt がここで定義済みのため、エラーにならない
             combined_prompt = create_focused_prompt(element_key_for_prompt, training_elements[element_key_for_prompt])
             combined_prompt += f"\n\n{scenario_text}"
         else:
@@ -358,7 +330,7 @@ if user_input:
         ai_response = st.session_state.genai_chat.send_message(user_input)
         response_text = ai_response.text
 
-        # ★★★ 修正箇所: 要素別トレーニングでの合否判定チェック ★★★
+        # 要素別トレーニングでの合否判定チェック
         if practice_mode == '要素別トレーニング (一点集中)' and selected_element:
             # 正規表現で合否判定を抽出
             match = re.search(r"【合否判定】:\s*(合格|不合格)", response_text)
@@ -371,7 +343,7 @@ if user_input:
                     # ユーザーに分かりやすいメッセージを追加
                     response_text += "\n\n🎉 **おめでとうございます！この要素を合格しました。** 次の要素に進むか、すべての要素合格後に総合実践に挑戦しましょう！"
             
-            # 合否判定のメッセージが末尾にあることを前提に、合否メッセージを強調する
+            # 合否判定のメッセージを強調する
             response_text = response_text.replace("【合否判定】: 合格", "**【合否判定】: <span style='color:green;'>合格</span>**")
             response_text = response_text.replace("【合否判定】: 不合格", "**【合否判定】: <span style='color:red;'>不合格</span>**")
 
@@ -398,7 +370,7 @@ if st.button("新しいシナリオで練習する (進捗は維持)", key="rese
     st.session_state.current_scenario = None
     st.rerun()
 
-# ★★★ 修正箇所: 全進捗リセットボタンの追加 ★★★
+# 全進捗リセットボタン
 if st.button("すべての要素の進捗をリセット", key="full_reset_button"):
     st.session_state.element_status = {key: False for key in training_elements.keys()}
     st.session_state.chat_history = []
@@ -431,6 +403,3 @@ else:
             if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
                 delete_chat_history(log['session_id'])
                 st.rerun()
-
-
-
