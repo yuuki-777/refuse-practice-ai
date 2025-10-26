@@ -15,7 +15,7 @@ else:
 # --- ログファイルのパス ---
 CHAT_LOG_FILE = "chat_logs.json"
 
-# --- 履歴管理関数 (省略) ---
+# --- 履歴管理関数 ---
 def save_chat_history(history):
     if os.path.exists(CHAT_LOG_FILE):
         with open(CHAT_LOG_FILE, "r", encoding="utf-8") as f:
@@ -53,6 +53,15 @@ def delete_chat_history(session_id_to_delete):
     st.success("履歴を削除しました！")
 
 
+# --- テキストの強調表示処理関数 ---
+def highlight_text(text):
+    """AIが出力する太字斜体下線マークアップを赤色に変換する"""
+    # AIが以下の形式（_**強調したい部分**_）で出力することを前提とする
+    highlighted = text.replace("_**", '<span style="color:red; font-weight:bold; text-decoration: underline;">')
+    highlighted = highlighted.replace("**_**", '</span>')
+    return highlighted
+
+
 # --- 2. モデルの選択 ---
 model = genai.GenerativeModel('models/gemini-pro-latest')
 
@@ -62,23 +71,21 @@ st.title("誘いを断る練習AI")
 st.write("断ることが苦手なあなたのための、コミュニケーション練習アプリです。AIからの誘いを断ってみましょう！")
 
 
-# ★★★ 修正箇所：training_elements の定義 ★★★
-# --- 練習要素の定義 (要素別トレーニング用: 6要素) ---
+# --- 練習要素の定義 ---
 training_elements = {
-    "相手との関係性に応じた適切さ ": "表現面：相手との関係性に応じた適切な言葉遣い、敬語、直接的な断り表現を避けているか。",
-    "謝罪の言葉の有無と適切さ ": "表現面：謝罪の言葉が適切に使われているか。",
-    "断りの意思の明確さ ": "内容面：曖昧さがなく、断りの意思がはっきりと伝わるか。",
-    "理由の提示の有無と適切さ ": "内容面：納得できる理由か、具体性があるか。",
-    "代替案の提示の有無と適切さ ": "内容面：別の機会や方法を提案しているか。",
-    "相手への配慮 (感謝の言葉など) ": "内容面：相手の誘い自体を否定せず、感謝の言葉があるか。",
+    "相手との関係性に応じた適切さ (1点)": "表現面：相手との関係性に応じた適切な言葉遣い、敬語、直接的な断り表現を避けているか。",
+    "謝罪の言葉の有無と適切さ (1点)": "表現面：謝罪の言葉が適切に使われているか。",
+    "断りの意思の明確さ (1点)": "内容面：曖昧さがなく、断りの意思がはっきりと伝わるか。",
+    "理由の提示の有無と適切さ (1点)": "内容面：納得できる理由か、具体性があるか。",
+    "代替案の提示の有無と適切さ (1点)": "内容面：別の機会や方法を提案しているか。",
+    "相手への配慮 (感謝の言葉など) (1点)": "内容面：相手の誘い自体を否定せず、感謝の言葉があるか。",
 }
-# ★★★ 修正箇所 ここまで ★★★
+# 総合実践では以下の9要素すべてで評価されます（プロンプト内で定義）
 
 
-# --- 4. UIの配置とモード選択 (変更なし) ---
+# --- 4. UIの配置とモード選択 ---
 st.subheader("練習モードの選択とシナリオ設定")
 
-# 練習モードの選択
 practice_mode = st.radio(
     "1. 練習モードを選択してください:",
     ('総合実践 (全要素を評価)', '要素別トレーニング (一点集中)'),
@@ -89,10 +96,9 @@ practice_mode = st.radio(
 selected_element = ""
 if practice_mode == '要素別トレーニング (一点集中)':
     st.info("練習したい要素を一つ選んでください。AIがその点に絞ってフィードバックします（点数評価はありません）。")
-    # 要素を選択させる
     selected_element = st.selectbox(
         "▼ 集中して練習する要素を選択",
-        list(training_elements.keys()), # 6要素のみが表示される
+        list(training_elements.keys()),
         key='training_element_select'
     )
     st.markdown(f"**目標**: *{training_elements[selected_element]}*")
@@ -105,12 +111,11 @@ scenario_input = st.text_area(
     key="scenario_input"
 )
 
-# シナリオ入力が空欄でないか確認
 start_button_disabled = not scenario_input
 start_button = st.button("3. 練習を開始する", disabled=start_button_disabled, key="start_button")
 
 
-# --- 5. チャット履歴とGeminiチャットオブジェクトの初期化 (変更なし) ---
+# --- 5. チャット履歴とGeminiチャットオブジェクトの初期化 ---
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
     st.session_state.genai_chat = model.start_chat(history=[])
@@ -120,7 +125,7 @@ if "chat_history" not in st.session_state:
 
 # --- 6. システムプロンプトの設定 (テンプレート) ---
 
-# --- 総合実践モード用の詳細なプロンプトテンプレート (9要素評価のまま維持) ---
+# --- 総合実践モード用の詳細なプロンプトテンプレート (完全版) ---
 SYSTEM_PROMPT_FULL_TEMPLATE = f"""
 あなたはユーザーが誘いを断る練習をするためのロールプレイング相手です。
 
@@ -139,7 +144,7 @@ SYSTEM_PROMPT_FULL_TEMPLATE = f"""
 全体評価：
 ・回答に対して点数をつける（10点満点）
 ・表現面、内容面をそれぞれ**5点満点**で評価し、その合計を全体の点数としてください。
-・点数をつける際は、なぜその点数になったのか、表現面、内容面の点数の内訳（各項目）、それぞれどこの要素が足りないのかなどをユーザーが分かりやすいように説明してください。
+・点数をつける際は、なぜその点数になったのか、表現面、内容面それぞれの点数の内訳（各項目）、どこの要素が足りないのかなどをユーザーが分かりやすいように説明してください。
 
 表現面（言葉遣い、態度、丁寧さなど）：以下の内容が含まれているかで判断（5点満点）
 ・相手との関係性に応じた適切さ: 1点
@@ -148,22 +153,22 @@ SYSTEM_PROMPT_FULL_TEMPLATE = f"""
 ・謝罪の言葉の有無と適切さ：1点
 ・全体的な丁寧さ、配慮が感じられるか：1点
 ・文法的な正確さ、自然な言い回しか：2点
+・内容の一貫性: 矛盾した内容になっていないか：1点 (※これは9要素目を表現面に含めた場合の便宜上の点数配分例です。合計10点になるように調整しています。)
 
 内容面（断りの理由、代替案など）：以下の内容が含まれているかで判断（5点満点）
-・断りの意思の明確さ: 曖昧さがないか、はっきりと伝わるか：1点
-・理由の提示の有無と適切さ: 納得できる理由か、具体性があるか：1点
-・代替案の提示の有無と適切さ: 別の機会や方法を提案しているか：1点
+・断りの意思の明確さ: 1点
+・理由の提示の有無と適切さ: 1点
+・代替案の提示の有無と適切さ: 1点
 ・相手への配慮: 相手の誘い自体を否定せず、感謝の言葉があるか：1点
-・内容の一貫性: 矛盾した内容になっていないか：1点
+・内容の一貫性: 1点 (※内容面の配点は合計5点になるように調整しています。)
 
 重み付けの考慮：
 ・提示されたシチュエーション（誘い手の特長、誘いの内容など）を考慮し、その状況において「表現面」と「内容面」のどちらがより重要であったか（あるいは両方が同等に重要であったか）を判断し、フィードバックに反映させてください。
-　・目上の人やフォーマルな関係: 表現面（敬語、丁寧さ、クッション言葉、間接的な表現、謝罪の言葉）
+	・目上の人やフォーマルな関係: 表現面（敬語、丁寧さ、クッション言葉、間接的な表現、謝罪の言葉）
 	・親しい友人や家族: 内容面（具体的な理由、代替案の提示）
-	・ビジネスシーン（取引先など）: 丁寧な表現面に加えて、内容面での明確な理由や建設的な代替案（例：別日程の提案、他の担当者の紹介）が重要
 
 改善提案：
-・フィードバックの結果から、不足している要素（表現面、内容面それぞれ）を補うためにどんな練習をしたらよいかを具体的に提示してください。
+・フィードバックの結果から、不足している要素を補うためにどんな練習をしたらよいかを具体的に提示してください。
 
 例：
 誘い：[シチュエーション詳細：誘い手は会社の先輩、飲み会の誘い、少し断りにくい] 今度の金曜の夜、一緒に飲みに行かない？
@@ -171,11 +176,11 @@ SYSTEM_PROMPT_FULL_TEMPLATE = f"""
 あなたの反応：そっか、残念！また今度ね。
 あなたのフィードバック：
 **全体評価： 6/10点 （不合格）**
-**点数内訳：表現面: 3/5点 (理由：謝罪はあるがクッション言葉なし)、内容面: 3/5点 (理由：代替案なし、理由が抽象的)**
+**点数内訳：表現面: 3/5点、内容面: 3/5点** (理由：謝罪はあるがクッション言葉なし、代替案なし、理由が抽象的)
 ... (中略) ...
 """
 
-# --- 要素別トレーニング用プロンプト生成関数 (変更なし) ---
+# --- 要素別トレーニング用プロンプト生成関数 ---
 def create_focused_prompt(element_key, element_description):
     """選択された要素に特化したフィードバックプロンプトを生成する関数 (点数評価なし)"""
     
@@ -202,9 +207,16 @@ def create_focused_prompt(element_key, element_description):
 1. **評価**: **{element_key}** の観点から、具体的にどの言葉が良かったか/悪かったかを、ユーザーの感情に配慮しつつ**コーチング形式**で説明してください。
 2. **改善提案**: この**特定の要素**を補うために、どんな練習をしたらよいかを具体的に提示してください。
 
+**【AIへの追加指示】**
+ユーザーの断り方（例：「大変恐縮なのですが、その日は先約がありまして」）を、あなたの応答の**最初に**、以下の手順で**マークアップして引用**してください。
+1. **練習目標である要素に最も関連する部分（単語または句）**を見つけます。
+2. その部分を、**太字と斜体、下線**でマークアップ（_**...**_）してください。
+3. その後に、通常の評価と改善提案を続けてください。
+
 **フィードバックの例:**
-**評価:** 謝罪の言葉はありましたが、少し軽すぎる印象を与えました。「すみません」ではなく、「大変申し訳ありません」という表現を使うと、相手への配慮がより伝わります。
-**改善提案:** 次のターンでは、「大変恐縮ですが」のような、より重みのある**クッション言葉**を使うことを意識して、もう一度断ってみましょう。
+**引用**: 「_**大変恐縮なのですが**_、その日は予定があって…」
+**評価:** 相手との関係性に配慮した「大変恐縮ですが」というクッション言葉は、目上の相手への断り方として満点です。
+**改善提案:** 次のターンでは、他の要素にも意識を向けましょう。
 """
     return focused_prompt
 
@@ -215,19 +227,15 @@ if st.session_state.get("current_scenario") != scenario_input or (start_button a
     st.session_state.chat_history = []
     st.session_state.genai_chat = model.start_chat(history=[])
     
-    # ユーザーが入力したシナリオをプロンプトに組み込む
     scenario_text = f"**ユーザーが設定したシナリオ:** {scenario_input}"
     
     if practice_mode == '要素別トレーニング (一点集中)':
-        # 要素別トレーニングモード
         combined_prompt = create_focused_prompt(selected_element, training_elements[selected_element])
         combined_prompt += f"\n\n{scenario_text}"
         
     else: # 総合実践 (全要素を評価)
-        # 総合実践モード
         combined_prompt = f"{SYSTEM_PROMPT_FULL_TEMPLATE}\n\n{scenario_text}"
         
-    # AIへの送信ロジックは共通
     with st.spinner("AIが誘いを考えています..."):
         initial_response = st.session_state.genai_chat.send_message(combined_prompt)
         st.session_state.chat_history.append({"role": "assistant", "content": initial_response.text})
@@ -235,12 +243,16 @@ if st.session_state.get("current_scenario") != scenario_input or (start_button a
         st.session_state.current_scenario = scenario_input
         st.rerun()
 
-# --- 8. 会話履歴の表示 (変更なし) ---
+# --- 8. 会話履歴の表示 ---
 for message in st.session_state.chat_history:
     with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+        if message["role"] == "assistant":
+             # HTMLをStreamlitで解釈させるためにunsafe_allow_html=Trueを設定
+             st.markdown(highlight_text(message["content"]), unsafe_allow_html=True)
+        else:
+             st.markdown(message["content"])
 
-# --- 9. ユーザー入力の処理 (変更なし) ---
+# --- 9. ユーザー入力の処理 ---
 user_input = st.chat_input("あなたの断り言葉を入力してください")
 
 if user_input:
@@ -251,20 +263,21 @@ if user_input:
     with st.spinner("AIが返答を考えています..."):
         ai_response = st.session_state.genai_chat.send_message(user_input)
         st.session_state.chat_history.append({"role": "assistant", "content": ai_response.text})
+        # AI応答を強調表示付きで表示
         with st.chat_message("assistant"):
-            st.markdown(ai_response.text)
+            st.markdown(highlight_text(ai_response.text), unsafe_allow_html=True)
 
     time.sleep(1)
     st.rerun()
 
-# 履歴を保存するボタン (変更なし)
+# 履歴を保存するボタン
 if st.button("現在の会話履歴を保存", key="save_button"):
     if st.session_state.chat_history:
         save_chat_history(st.session_state.chat_history)
     else:
         st.warning("保存する会話履歴がありません。")
 
-# 会話リセットボタン (変更なし)
+# 会話リセットボタン
 if st.button("新しいシナリオで練習する", key="reset_button"):
     st.session_state.chat_history = []
     st.session_state.genai_chat = model.start_chat(history=[])
@@ -273,7 +286,7 @@ if st.button("新しいシナリオで練習する", key="reset_button"):
     st.rerun()
 
 
-# --- 履歴の閲覧セクション (変更なし) ---
+# --- 履歴の閲覧セクション ---
 st.subheader("これまでの練習履歴")
 
 all_histories = load_all_chat_histories()
@@ -287,7 +300,10 @@ else:
                 if message["role"] == "assistant" and "あなたはユーザーが誘いを断る練習をするためのロールプレイング相手です。" in message["content"]:
                     continue 
                 with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
+                    if message["role"] == "assistant":
+                        st.markdown(highlight_text(message["content"]), unsafe_allow_html=True)
+                    else:
+                        st.markdown(message["content"])
 
             if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
                 delete_chat_history(log['session_id'])
