@@ -185,7 +185,8 @@ def create_focused_prompt(element_key, element_description):
     
     focused_prompt = f"""
 あなたはユーザーが特定の要素を練習するためのコーチです。
-... (中略：点数評価をしない指示) ...
+最初の応答では、以下の指示にのみ従ってください。ユーザーに何か誘いをかけてください。この応答に、ユーザーの断り方に対するフィードバックは絶対に含めないでください。
+必ず、最初に提示するシナリオのシチュエーションを詳細に記載してから、誘い文を続けてください。
 
 **【出力形式の厳守】**
 * **結論ファースト**: まず「評価」を太字の見出しで表示してください。
@@ -290,3 +291,4 @@ else:
             if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
                 delete_chat_history(log['session_id'])
                 st.rerun()
+
