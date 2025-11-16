@@ -15,6 +15,29 @@ else:
 
 # --- ログファイルのパス ---
 CHAT_LOG_FILE = "chat_logs.json"
+# --- 【新規】進捗ファイルのパスを定義 ---
+PROGRESS_FILE = "element_progress.json"
+
+# --- 【新規】進捗のロード/セーブ関数 ---
+def load_element_progress(training_elements):
+    """進捗ファイルを読み込む。ない場合や破損時は初期状態を返す。"""
+    initial_status = {key: False for key in training_elements.keys()}
+    if os.path.exists(PROGRESS_FILE):
+        with open(PROGRESS_FILE, "r", encoding="utf-8") as f:
+            try:
+                # ファイルの内容を読み込み、初期キーで上書きして完全性を保証
+                loaded_status = json.load(f)
+                initial_status.update(loaded_status)
+            except json.JSONDecodeError:
+                # ファイルが破損していた場合は初期状態のまま
+                pass
+    return initial_status
+
+def save_element_progress(status):
+    """進捗をファイルに保存する。"""
+    with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
+        json.dump(status, f, ensure_ascii=False, indent=4)
+
 
 # --- 履歴管理関数 (変更なし) ---
 def save_chat_history(history):
@@ -81,7 +104,7 @@ training_elements = {
     "相手への配慮 (感謝の言葉など) (1点)": "内容面：相手の誘い自体を否定せず、感謝の言葉があるか。",
 }
 
-# --- 6. システムプロンプトの設定 (テンプレート) **【このセクションを上に移動】** ---
+# --- 6. システムプロンプトの設定 (テンプレート) ---
 
 # --- 総合実践モード用の詳細なプロンプトテンプレート ---
 SYSTEM_PROMPT_FULL_TEMPLATE = f"""
@@ -187,8 +210,8 @@ if "chat_history" not in st.session_state:
     st.session_state.genai_chat = model.start_chat(history=[])
     st.session_state.initial_prompt_sent = False
     st.session_state.current_scenario = None
-    # 要素別トレーニングの合格状況を管理
-    st.session_state.element_status = {key: False for key in training_elements.keys()}
+    # 【変更】要素別トレーニングの合格状況をファイルからロードする
+    st.session_state.element_status = load_element_progress(training_elements)
 
 # 進捗状況の計算
 all_elements_passed = all(st.session_state.element_status.values())
@@ -288,11 +311,9 @@ if st.session_state.get("current_scenario") != scenario_input or (start_button a
     if practice_mode == '要素別トレーニング (一点集中)':
         element_key_for_prompt = selected_element 
         if element_key_for_prompt:
-            # create_focused_prompt がここで定義済みのため、エラーにならない
             combined_prompt = create_focused_prompt(element_key_for_prompt, training_elements[element_key_for_prompt])
             combined_prompt += f"\n\n{scenario_text}"
         else:
-            # 選択肢がない場合はエラー (すべての要素を合格した状態)
             combined_prompt = "" 
         
     else: # 総合実践 (全要素を評価)
@@ -339,6 +360,8 @@ if user_input:
                 if not st.session_state.element_status[current_element_key]:
                     # 合格フラグを立てる
                     st.session_state.element_status[current_element_key] = True
+                    # 【変更】進捗をファイルに保存する
+                    save_element_progress(st.session_state.element_status)
                     # ユーザーに分かりやすいメッセージを追加
                     response_text += "\n\n🎉 **おめでとうございます！この要素を合格しました。** 次の要素に進むか、すべての要素合格後に総合実践に挑戦しましょう！"
             
@@ -371,7 +394,11 @@ if st.button("新しいシナリオで練習する (進捗は維持)", key="rese
 
 # 全進捗リセットボタン
 if st.button("すべての要素の進捗をリセット", key="full_reset_button"):
+    # 【変更】element_statusを初期化し、進捗ファイルも削除する
     st.session_state.element_status = {key: False for key in training_elements.keys()}
+    if os.path.exists(PROGRESS_FILE):
+        os.remove(PROGRESS_FILE)
+
     st.session_state.chat_history = []
     st.session_state.genai_chat = model.start_chat(history=[])
     st.session_state.initial_prompt_sent = False
@@ -402,5 +429,3 @@ else:
             if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
                 delete_chat_history(log['session_id'])
                 st.rerun()
-
-
