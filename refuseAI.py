@@ -108,7 +108,7 @@ st.write("断ることが苦手なあなたのための、コミュニケーシ�
 # --- 【新規】ユーザーID入力セクション ---
 st.subheader("🔑 ユーザー認証と進捗のロード")
 user_id_input = st.text_input(
-    "あなたのユーザーID (半角英数字) を入力してください。進捗と履歴はこのIDで保存されます。",
+    "あなたの学籍番号 (半角英数字) を入力してください。進捗と履歴はこのIDで保存されます。",
     key="user_id_key"
 )
 
@@ -470,3 +470,4 @@ else:
             if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
                 delete_chat_history(log['session_id'], user_id)
                 st.rerun()
+
