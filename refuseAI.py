@@ -13,36 +13,46 @@ else:
     st.error("GOOGLE_API_KEY が設定されていません。Streamlit Secretsまたは環境変数を確認してください。")
     st.stop()
 
-# --- ログファイルのパス ---
-CHAT_LOG_FILE = "chat_logs.json"
-# --- 【新規】進捗ファイルのパスを定義 ---
-PROGRESS_FILE = "element_progress.json"
+# --- ログファイルのディレクトリ設定 ---
+# ユーザーごとのデータを保存するディレクトリを定義
+LOGS_DIR = "user_data" 
 
-# --- 【新規】進捗のロード/セーブ関数 ---
-def load_element_progress(training_elements):
+def get_user_files(user_id):
+    """ユーザーIDに基づいてチャットログと進捗ログのパスを生成"""
+    # ディレクトリが存在しない場合は作成 (Streamlit Cloudの永続化対応)
+    if not os.path.exists(LOGS_DIR):
+        os.makedirs(LOGS_DIR, exist_ok=True)
+    return {
+        "chat": os.path.join(LOGS_DIR, f"chat_logs_{user_id}.json"),
+        "progress": os.path.join(LOGS_DIR, f"element_progress_{user_id}.json")
+    }
+
+# --- 進捗のロード/セーブ関数 (user_id対応) ---
+def load_element_progress(training_elements, user_id):
     """進捗ファイルを読み込む。ない場合や破損時は初期状態を返す。"""
+    file_path = get_user_files(user_id)["progress"] # 動的なパス
     initial_status = {key: False for key in training_elements.keys()}
-    if os.path.exists(PROGRESS_FILE):
-        with open(PROGRESS_FILE, "r", encoding="utf-8") as f:
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
             try:
-                # ファイルの内容を読み込み、初期キーで上書きして完全性を保証
                 loaded_status = json.load(f)
                 initial_status.update(loaded_status)
             except json.JSONDecodeError:
-                # ファイルが破損していた場合は初期状態のまま
                 pass
     return initial_status
 
-def save_element_progress(status):
+def save_element_progress(status, user_id):
     """進捗をファイルに保存する。"""
-    with open(PROGRESS_FILE, "w", encoding="utf-8") as f:
+    file_path = get_user_files(user_id)["progress"] # 動的なパス
+    with open(file_path, "w", encoding="utf-8") as f:
         json.dump(status, f, ensure_ascii=False, indent=4)
 
 
-# --- 履歴管理関数 (変更なし) ---
-def save_chat_history(history):
-    if os.path.exists(CHAT_LOG_FILE):
-        with open(CHAT_LOG_FILE, "r", encoding="utf-8") as f:
+# --- 履歴管理関数 (user_id対応) ---
+def save_chat_history(history, user_id):
+    file_path = get_user_files(user_id)["chat"] # 動的なパス
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
             try:
                 logs = json.load(f)
             except json.JSONDecodeError:
@@ -55,13 +65,14 @@ def save_chat_history(history):
         "history": history
     }
     logs.append(session_data)
-    with open(CHAT_LOG_FILE, "w", encoding="utf-8") as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         json.dump(logs, f, ensure_ascii=False, indent=4)
     st.success("現在の会話履歴を保存しました！")
 
-def load_all_chat_histories():
-    if os.path.exists(CHAT_LOG_FILE):
-        with open(CHAT_LOG_FILE, "r", encoding="utf-8") as f:
+def load_all_chat_histories(user_id):
+    file_path = get_user_files(user_id)["chat"] # 動的なパス
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
             try:
                 logs = json.load(f)
                 return logs
@@ -69,10 +80,11 @@ def load_all_chat_histories():
                 return []
     return []
 
-def delete_chat_history(session_id_to_delete):
-    logs = load_all_chat_histories()
+def delete_chat_history(session_id_to_delete, user_id):
+    file_path = get_user_files(user_id)["chat"] # 動的なパス
+    logs = load_all_chat_histories(user_id)
     updated_logs = [log for log in logs if log["session_id"] != session_id_to_delete]
-    with open(CHAT_LOG_FILE, "w", encoding="utf-8") as f:
+    with open(file_path, "w", encoding="utf-8") as f:
         json.dump(updated_logs, f, ensure_ascii=False, indent=4)
     st.success("履歴を削除しました！")
 
@@ -93,6 +105,20 @@ model = genai.GenerativeModel('models/gemini-pro-latest')
 st.title("誘いを断る練習AI")
 st.write("断ることが苦手なあなたのための、コミュニケーション練習アプリです。AIからの誘いを断ってみましょう！")
 
+# --- 【新規】ユーザーID入力セクション ---
+st.subheader("🔑 ユーザー認証と進捗のロード")
+user_id_input = st.text_input(
+    "あなたのユーザーID (半角英数字) を入力してください。進捗と履歴はこのIDで保存されます。",
+    key="user_id_key"
+)
+
+# ユーザーIDが入力されるまでアプリの実行を停止
+if not user_id_input:
+    st.info("練習を開始するには、まずユーザーIDを入力してください。")
+    st.stop()
+
+# ユーザーIDを変数に設定
+user_id = user_id_input 
 
 # --- 練習要素の定義 (要素別トレーニング用: 6要素) ---
 training_elements = {
@@ -105,6 +131,7 @@ training_elements = {
 }
 
 # --- 6. システムプロンプトの設定 (テンプレート) ---
+# ... (SYSTEM_PROMPT_FULL_TEMPLATEとcreate_focused_promptの定義はそのまま)
 
 # --- 総合実践モード用の詳細なプロンプトテンプレート ---
 SYSTEM_PROMPT_FULL_TEMPLATE = f"""
@@ -115,7 +142,7 @@ SYSTEM_PROMPT_FULL_TEMPLATE = f"""
 
 --- シナリオ開始 ---
 **最初の応答では、以下の指示にのみ従ってください。ユーザーに何か誘いをかけてください。この応答に、ユーザーの断り方に対するフィードバックは絶対に含めないでください。**
-**必ず、最初に提示するシナリオのシチュエーションを詳細に記載してから、誘い文を続けてください。**
+**必ず、最初に提示するシナリオのシチュエーションを詳細に記載し、**相手との関係性（サークルの先輩、バイトの同僚、大学の友人、新卒の教育担当など）**を明確にしてから、誘い文を続けてください。**
 
 --- ユーザーの応答後 ---
 ユーザーがあなたの誘いを断った後の応答では、その断り方に応じて、納得して引き下がるか、あるいは少しだけ食い下がってください。
@@ -181,7 +208,7 @@ def create_focused_prompt(element_key, element_description):
 
 --- シナリオ開始 ---
 最初の応答では、以下の指示にのみ従ってください。ユーザーに何か誘いをかけてください。この応答に、ユーザーの断り方に対するフィードバックは絶対に含めないでください。
-必ず、最初に提示するシナリオのシチュエーションを詳細に記載してから、誘い文を続けてください。
+必ず、最初に提示するシナリオのシチュエーションを詳細に記載し、**相手との関係性（サークルの先輩、バイトの同僚、大学の友人、新卒の教育担当など）**を明確にしてから、誘い文を続けてください。
 
 --- ユーザーの応答後 ---
 ユーザーがあなたの誘いを断った後の応答では、その断り方に応じて、納得して引き下がるか、あるいは少しだけ食い下がってください。
@@ -210,14 +237,18 @@ def create_focused_prompt(element_key, element_description):
 
 # --- 4. UIの配置とモード選択 ---
 
-# --- セッションステートの初期化 ---
-if "chat_history" not in st.session_state:
+# --- セッションステートの初期化とIDチェック ---
+# ユーザーIDが変わった場合や、セッション開始時にリセット＆ロードを実行
+if "chat_history" not in st.session_state or "user_id" not in st.session_state or st.session_state.user_id != user_id:
+    
     st.session_state.chat_history = []
     st.session_state.genai_chat = model.start_chat(history=[])
     st.session_state.initial_prompt_sent = False
     st.session_state.current_scenario = None
-    # 【変更】要素別トレーニングの合格状況をファイルからロードする
-    st.session_state.element_status = load_element_progress(training_elements)
+    st.session_state.user_id = user_id # 現在のIDを記憶
+    
+    # 【変更】要素別トレーニングの合格状況をIDからロード
+    st.session_state.element_status = load_element_progress(training_elements, user_id) 
 
 # 進捗状況の計算
 all_elements_passed = all(st.session_state.element_status.values())
@@ -366,8 +397,8 @@ if user_input:
                 if not st.session_state.element_status[current_element_key]:
                     # 合格フラグを立てる
                     st.session_state.element_status[current_element_key] = True
-                    # 【変更】進捗をファイルに保存する
-                    save_element_progress(st.session_state.element_status)
+                    # 【変更】進捗をファイルに保存する (IDベース)
+                    save_element_progress(st.session_state.element_status, user_id)
                     # ユーザーに分かりやすいメッセージを追加
                     response_text += "\n\n🎉 **おめでとうございます！この要素を合格しました。** 次の要素に進むか、すべての要素合格後に総合実践に挑戦しましょう！"
             
@@ -384,9 +415,10 @@ if user_input:
     st.rerun()
 
 # 履歴を保存するボタン
+# 【変更】user_idを引数として渡す
 if st.button("現在の会話履歴を保存", key="save_button"):
     if st.session_state.chat_history:
-        save_chat_history(st.session_state.chat_history)
+        save_chat_history(st.session_state.chat_history, user_id)
     else:
         st.warning("保存する会話履歴がありません。")
 
@@ -400,23 +432,25 @@ if st.button("新しいシナリオで練習する (進捗は維持)", key="rese
 
 # 全進捗リセットボタン
 if st.button("すべての要素の進捗をリセット", key="full_reset_button"):
-    # 【変更】element_statusを初期化し、進捗ファイルも削除する
+    # 【変更】element_statusを初期化し、進捗ファイルも削除する (IDベース)
     st.session_state.element_status = {key: False for key in training_elements.keys()}
-    if os.path.exists(PROGRESS_FILE):
-        os.remove(PROGRESS_FILE)
+    progress_file_path = get_user_files(user_id)["progress"]
+    if os.path.exists(progress_file_path):
+        os.remove(progress_file_path)
 
     st.session_state.chat_history = []
     st.session_state.genai_chat = model.start_chat(history=[])
     st.session_state.initial_prompt_sent = False
     st.session_state.current_scenario = None
-    st.info("すべての進捗がリセットされました。")
+    st.info(f"ID: {user_id} の進捗がリセットされました。")
     st.rerun()
 
 
-# --- 履歴の閲覧セクション (変更なし) ---
+# --- 履歴の閲覧セクション ---
 st.subheader("これまでの練習履歴")
 
-all_histories = load_all_chat_histories()
+# 【変更】user_idを引数として渡す
+all_histories = load_all_chat_histories(user_id)
 
 if not all_histories:
     st.info("まだ保存された練習履歴はありません。")
@@ -432,7 +466,7 @@ else:
                     else:
                         st.markdown(message["content"])
 
+            # 【変更】user_idを引数として渡す
             if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
-                delete_chat_history(log['session_id'])
+                delete_chat_history(log['session_id'], user_id)
                 st.rerun()
-
