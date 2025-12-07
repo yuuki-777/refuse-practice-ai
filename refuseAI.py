@@ -129,6 +129,30 @@ training_elements = {
     "相手への配慮 (感謝の言葉など) (1点)": "内容面：相手の誘い自体を否定せず、感謝の言葉があるか。",
 }
 
+# --- 4. UIの配置とモード選択 ---
+# --- セッションステートの初期化 ---
+
+# ★★★ 修正箇所: セッションステート初期化のロジックを分離 ★★★
+# Streamlitの実行順序でキーが確定するように制御
+if "chat_history" not in st.session_state or "user_id" not in st.session_state or st.session_state.user_id != user_id:
+    
+    st.session_state.chat_history = []
+    st.session_state.genai_chat = model.start_chat(history=[])
+    st.session_state.initial_prompt_sent = False
+    st.session_state.current_scenario = None
+    st.session_state.user_id = user_id 
+    st.session_state.selected_element_display = "総合実践"
+    st.session_state.new_session_flag = False
+    
+    # 要素別トレーニングの合格状況をファイルからロードする
+    st.session_state.element_status = load_element_progress(training_elements, user_id) 
+
+# タブキーの初期化は、リセット時と初回起動時の両方で、確実に実行されるように分離
+if "main_tabs_container" not in st.session_state:
+    st.session_state.main_tabs_container = tab_titles[0] # 初期値を設定タブの名称に設定
+# --------------------------------------------------------------------------
+
+
 # --- 6. システムプロンプトの設定 (テンプレート) ---
 
 # --- 総合実践モード用の詳細なプロンプトテンプレート ---
@@ -280,9 +304,10 @@ if "chat_history" not in st.session_state or "user_id" not in st.session_state o
 # --- 画面のタブ分割 ---
 tab_titles = ["1. 設定と進捗", "2. ロールプレイング実践", "3. 履歴と分析"]
 
-# タブキーの初期化を st.tabs 呼び出しの直前に移動
+# ★★★ 最終修正箇所: タブキーの初期化を st.tabs 呼び出しの直前に移動 ★★★
 if "main_tabs_container" not in st.session_state:
     st.session_state.main_tabs_container = tab_titles[0] # 初期値を設定タブの名称に設定
+# --------------------------------------------------------------------------
 
 # st.tabs の呼び出し
 tabs = st.tabs(tab_titles, key="main_tabs_container")
@@ -372,7 +397,7 @@ with tab1:
     # ユーザーがシナリオを入力するUI
     st.markdown("### 2. シナリオの入力 (オプション)")
     
-    # 課題解消: シナリオ入力の説明強化
+    # 課題解消: シナリオ入力の説明強化 ＆ 必須解除
     st.info("💡 **希望するシナリオがない場合は空欄のまま**で構いません。空欄の場合、AIが自動でシナリオを生成します。")
     scenario_input = st.text_area(
         "【任意】誘い手（誰から）、誘いの内容、断りにくさのレベル（低・中・高）を具体的に入力してください。",
@@ -390,10 +415,7 @@ with tab1:
         st.session_state.genai_chat = model.start_chat(history=[])
         
         st.session_state.initial_prompt_sent = False
-        
-        # 入力がない場合は空文字列を渡す (Section 7で処理)
-        st.session_state.current_scenario = scenario_input.strip() 
-        
+        st.session_state.current_scenario = scenario_input.strip() # 入力がない場合は空文字列を渡す
         st.session_state.new_session_flag = True
         
         st.session_state.selected_element_display = current_selected_element_display
@@ -416,7 +438,6 @@ with tab2:
         element_name = ""
         display_text = st.session_state.get("selected_element_display")
         
-        # ★★★ 修正箇所: 選択中のモードと目標を明示 ★★★
         if display_text and display_text != "総合実践":
             mode_name = f"要素別トレーニング"
             element_name = f" | 目標: **{display_text}**"
@@ -436,7 +457,7 @@ with tab2:
         
         st.session_state.new_session_flag = False 
         
-        # ★★★ 修正箇所: シナリオ入力が空欄の場合の処理 ★★★
+        # シナリオ入力が空欄の場合の処理
         scenario_input_value = st.session_state.current_scenario
         
         if not scenario_input_value:
@@ -444,7 +465,7 @@ with tab2:
             scenario_text = "**ユーザーはシナリオを指定しませんでした。ターゲット層（大学1年〜新卒1年）に合った、断りにくい誘いを一つ自動で設定してください。**"
         else:
             scenario_text = f"**ユーザーが設定したシナリオ:** {scenario_input_value}"
-        # ---------------------------------------------------
+        
         
         element_key_for_prompt = next((key for key in training_elements if st.session_state.selected_element_display in key), None)
         
