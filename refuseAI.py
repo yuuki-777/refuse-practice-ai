@@ -278,13 +278,15 @@ if "chat_history" not in st.session_state or "user_id" not in st.session_state o
 # --- 画面のタブ分割 ---
 tab_titles = ["1. 設定と進捗", "2. ロールプレイング実践", "3. 履歴と分析"]
 
-# アクティブタブを制御するロジック
-# active_tab は不要だが、初期化だけ残す
-if 'active_tab' not in st.session_state:
-    st.session_state.active_tab = 0
+# ★★★ 修正箇所: タブキーの確実な初期化 ★★★
+# st.tabsの呼び出しより前にキーが存在することを保証する
+if "main_tabs_container" not in st.session_state:
+    st.session_state.main_tabs_container = tab_titles[0] # 初期値を設定タブの名称に設定
+# ----------------------------------------------
 
-# ★★★ 修正箇所: st.tabs の呼び出し方を修正 (キーは維持するが、エラー回避を優先) ★★★
-# 戻り値をリストで受け取り、展開する
+
+# ★★★ 修正箇所: st.tabs の呼び出し方を修正 (キーのみ) ★★★
+# TypeErrorを避けるため、戻り値をリストで受け取り、展開する
 tabs = st.tabs(tab_titles, key="main_tabs_container")
 
 # 展開処理はリスト変数に対して行う
