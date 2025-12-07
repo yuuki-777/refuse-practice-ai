@@ -282,8 +282,8 @@ tab_titles = ["1. 設定と進捗", "2. ロールプレイング実践", "3. 履
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = 0
 
-# ★★★ 修正箇所: st.tabs の呼び出し方を修正 (keyを追加) ★★★
-# default_index と key を使用して安定化
+# ★★★ 修正済み箇所: st.tabs の呼び出し方を修正 (default_index, keyを使用) ★★★
+# Streamlitにタブの状態管理を任せるため、st.session_state.active_tab は default_index に一度渡すだけにする
 tab1, tab2, tab3 = st.tabs(tab_titles, default_index=st.session_state.active_tab, key="main_tabs_container")
 # ----------------------------------------------
 
@@ -389,8 +389,8 @@ with tab1:
         
         st.session_state.selected_element_display = current_selected_element_display
         
-        # タブを実践画面に切り替え、再実行
-        st.session_state.active_tab = 1 
+        # ★★★ 修正箇所: タブの切り替えを key の値の変更で行う ★★★
+        st.session_state.main_tabs_container = tab_titles[1] # "2. ロールプレイング実践"
         st.rerun()
 
 
@@ -439,7 +439,7 @@ with tab2:
                 st.session_state.chat_history.append({"role": "assistant", "content": initial_response.text})
                 st.session_state.initial_prompt_sent = True
                 
-                st.session_state.active_tab = 1 
+                st.session_state.main_tabs_container = tab_titles[1] # 実践タブに維持
                 st.rerun()
         else:
             st.error("プロンプトの生成に失敗しました。設定を見直してください。")
@@ -499,7 +499,9 @@ with tab2:
         st.session_state.initial_prompt_sent = False
         st.session_state.current_scenario = None
         st.session_state.selected_element_display = "総合実践"
-        st.session_state.active_tab = 0 
+        
+        # ★★★ 修正箇所: key の値を変更し、設定タブに戻る ★★★
+        st.session_state.main_tabs_container = tab_titles[0] # "1. 設定と進捗"
         scroll_to_top()
         st.rerun()
         
@@ -534,7 +536,9 @@ with tab3:
 
                 if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
                     delete_chat_history(log['session_id'], user_id)
-                    st.session_state.active_tab = 2 
+                    
+                    # ★★★ 修正箇所: key の値を変更し、履歴タブに維持 ★★★
+                    st.session_state.main_tabs_container = tab_titles[2] # "3. 履歴と分析"
                     st.rerun()
                     
     st.markdown("---")
@@ -548,6 +552,8 @@ with tab3:
         st.session_state.genai_chat = model.start_chat(history=[])
         st.session_state.initial_prompt_sent = False
         st.session_state.selected_element_display = "総合実践"
+        
+        # ★★★ 修正箇所: key の値を変更し、設定タブに戻る ★★★
+        st.session_state.main_tabs_container = tab_titles[0] # "1. 設定と進捗"
         st.info(f"ID: {user_id} の進捗がリセットされました。")
-        st.session_state.active_tab = 0 
         st.rerun()
