@@ -282,9 +282,9 @@ tab_titles = ["1. 設定と進捗", "2. ロールプレイング実践", "3. 履
 if 'active_tab' not in st.session_state:
     st.session_state.active_tab = 0
 
-# ★★★ 修正箇所: st.tabs の呼び出し方を修正 ★★★
-# default_index を使用して TypeError を回避
-tab1, tab2, tab3 = st.tabs(tab_titles, default_index=st.session_state.active_tab)
+# ★★★ 修正箇所: st.tabs の呼び出し方を修正 (keyを追加) ★★★
+# default_index と key を使用して安定化
+tab1, tab2, tab3 = st.tabs(tab_titles, default_index=st.session_state.active_tab, key="main_tabs_container")
 # ----------------------------------------------
 
 
@@ -492,14 +492,14 @@ with tab2:
 
     st.markdown("---")
     
-    # 課題解消: 「新しいシナリオで練習する」を選択したときに、自分で上に戻って設定しなおすのが見つけにくかった。
+    # 「新しいシナリオで練習する」ボタン
     if st.button("🔄 新しい練習を始める（設定・進捗タブへ戻る）", key="reset_and_go_to_settings"):
         st.session_state.chat_history = []
         st.session_state.genai_chat = model.start_chat(history=[])
         st.session_state.initial_prompt_sent = False
         st.session_state.current_scenario = None
         st.session_state.selected_element_display = "総合実践"
-        st.session_state.active_tab = 0 # 設定タブに戻る
+        st.session_state.active_tab = 0 
         scroll_to_top()
         st.rerun()
         
