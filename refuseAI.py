@@ -140,6 +140,7 @@ SYSTEM_PROMPT_FULL_TEMPLATE = f"""
 
 --- シナリオ開始 ---
 **最初の応答では、以下の指示にのみ従ってください。ユーザーに何か誘いをかけてください。この応答に、ユーザーの断り方に対するフィードバックは絶対に含めないでください。**
+**ユーザーがシナリオを入力していない場合、**あなたはターゲット層に合ったランダムな誘い（サークル、バイト、新卒職場など）を自動で設定してください。**
 **必ず、最初に提示するシナリオのシチュエーションを詳細に記載し、**相手との関係性（サークルの先輩、バイトの同僚、大学の友人、新卒の教育担当など）**を明確にしてから、誘い文を続けてください。**
 
 --- ユーザーの応答後 ---
@@ -206,6 +207,7 @@ def create_focused_prompt(element_key, element_description):
 
 --- シナリオ開始 ---
 最初の応答では、以下の指示にのみ従ってください。ユーザーに何か誘いをかけてください。この応答に、ユーザーの断り方に対するフィードバックは絶対に含めないでください。
+**ユーザーがシナリオを入力していない場合、**あなたはターゲット層に合ったランダムな誘い（サークル、バイト、新卒職場など）を自動で設定してください。**
 必ず、最初に提示するシナリオのシチュエーションを詳細に記載し、**相手との関係性（サークルの先輩、バイトの同僚、大学の友人、新卒の教育担当など）**を明確にしてから、誘い文を続けてください。
 
 --- ユーザーの応答後 ---
@@ -250,7 +252,7 @@ def scroll_to_element(element_id):
         if (element) {{
             element.scrollIntoView({{behavior: "smooth", block: "start"}});
         }} else {{
-            // 要素が見つからない場合はトップに戻る
+            # 要素が見つからない場合はトップに戻る
              window.parent.document.querySelector('section.main').scrollTo(0, 0);
         }}
     </script>
@@ -275,30 +277,26 @@ if "chat_history" not in st.session_state or "user_id" not in st.session_state o
     st.session_state.element_status = load_element_progress(training_elements, user_id) 
 
 
-# --- 画面のタブ分割を Selectbox でシミュレート ---
+# --- 画面のタブ分割 ---
+tab_titles = ["1. 設定と進捗", "2. ロールプレイング実践", "3. 履歴と分析"]
 
-# タブの代わりにselectboxで画面を切り替える
-# 課題解消: 複数画面に分けた方が見やすいという指摘に対応
-view_options = ["1. 設定と進捗", "2. ロールプレイング実践", "3. 履歴と分析"]
+# タブキーの初期化を st.tabs 呼び出しの直前に移動
+if "main_tabs_container" not in st.session_state:
+    st.session_state.main_tabs_container = tab_titles[0] # 初期値を設定タブの名称に設定
 
-# ★★★ 修正箇所: st.tabs の代わりに st.selectbox を使用し、ビューを制御 ★★★
-if 'current_view' not in st.session_state:
-    st.session_state.current_view = view_options[0]
+# st.tabs の呼び出し
+tabs = st.tabs(tab_titles, key="main_tabs_container")
 
-current_view = st.selectbox(
-    "画面の切り替え:", 
-    view_options, 
-    index=view_options.index(st.session_state.current_view),
-    key='main_view_select'
-)
-st.session_state.current_view = current_view
+# 展開処理はリスト変数に対して行う
+tab1 = tabs[0]
+tab2 = tabs[1]
+tab3 = tabs[2]
 
 
 # ==============================================================================
-# VIEW 1: 設定と進捗
+# TAB 1: 設定と進捗 (設定と要素ポイントの確認)
 # ==============================================================================
-if st.session_state.current_view == view_options[0]: # "1. 設定と進捗"
-
+with tab1:
     st.subheader("📝 練習設定と要素別トレーニングの進捗")
     
     # 練習モードの選択 (ロック機能の実装)
@@ -372,64 +370,81 @@ if st.session_state.current_view == view_options[0]: # "1. 設定と進捗"
 
 
     # ユーザーがシナリオを入力するUI
-    st.markdown("### 2. シナリオの入力")
+    st.markdown("### 2. シナリオの入力 (オプション)")
     
     # 課題解消: シナリオ入力の説明強化
-    st.info("💡 **入力例:** 'サークルの先輩、週末の飲み会、断りにくさ：中'\nまたは '新卒の教育担当、急な残業の依頼、断りにくさ：高'")
+    st.info("💡 **希望するシナリオがない場合は空欄のまま**で構いません。空欄の場合、AIが自動でシナリオを生成します。")
     scenario_input = st.text_area(
-        "誘い手（誰から）、誘いの内容、断りにくさのレベル（低・中・高）を具体的に入力してください。",
+        "【任意】誘い手（誰から）、誘いの内容、断りにくさのレベル（低・中・高）を具体的に入力してください。",
         height=100,
         key="scenario_input"
     )
 
-    start_button_disabled = not scenario_input or (practice_mode == '要素別トレーニング (一点集中)' and not selected_element)
+    # ★★★ 修正箇所: シナリオ入力が空欄でもボタンを有効にする ★★★
+    start_button_disabled = (practice_mode == '要素別トレーニング (一点集中)' and not selected_element)
     
-    # 「練習を開始する」ボタンは実践画面への誘導も兼ねる
-    if st.button("▶️ 練習を開始し、実践画面へ進む", disabled=start_button_disabled, key="start_button_view1"):
+    # 「練習を開始する」ボタンはタブ2への誘導も兼ねる
+    if st.button("▶️ 練習を開始し、実践画面へ進む", disabled=start_button_disabled, key="start_button_tab1"):
         
         st.session_state.chat_history = []
         st.session_state.genai_chat = model.start_chat(history=[])
         
         st.session_state.initial_prompt_sent = False
-        st.session_state.current_scenario = scenario_input
+        
+        # 入力がない場合は空文字列を渡す (Section 7で処理)
+        st.session_state.current_scenario = scenario_input.strip() 
+        
         st.session_state.new_session_flag = True
         
         st.session_state.selected_element_display = current_selected_element_display
         
-        # ★★★ 修正箇所: Viewを切り替え、再実行 ★★★
-        st.session_state.current_view = view_options[1] # "2. ロールプレイング実践"
+        # タブを実践画面に切り替え、再実行
+        st.session_state.main_tabs_container = tab_titles[1] # "2. ロールプレイング実践"
         st.rerun()
 
 
 # ==============================================================================
-# VIEW 2: ロールプレイング実践
+# TAB 2: ロールプレイング実践 (会話エリア)
 # ==============================================================================
-elif st.session_state.current_view == view_options[1]: # "2. ロールプレイング実践"
-    
+with tab2:
     st.subheader("🗣️ ロールプレイング実践エリア")
     
     # 課題解消: 選択中の要素をロールプレイング画面で確認できるようにする
-    if st.session_state.get("current_scenario") and st.session_state.initial_prompt_sent:
+    if st.session_state.get("current_scenario") is not None and st.session_state.initial_prompt_sent:
         
         mode_name = "総合実践 (全要素評価)"
         element_name = ""
         display_text = st.session_state.get("selected_element_display")
         
+        # ★★★ 修正箇所: 選択中のモードと目標を明示 ★★★
         if display_text and display_text != "総合実践":
             mode_name = f"要素別トレーニング"
             element_name = f" | 目標: **{display_text}**"
             
         st.markdown(f"**練習モード:** {mode_name}{element_name}")
-        st.info(f"シチュエーション: **{st.session_state.current_scenario}**")
+        
+        # シナリオ入力が空の場合の表示を調整
+        scenario_display = st.session_state.current_scenario if st.session_state.current_scenario else "AIがランダムに設定"
+        st.info(f"シチュエーション: **{scenario_display}**")
+        
     else:
-        st.warning("「設定と進捗」画面で練習設定を入力し、「練習を開始」してください。")
+        st.warning("左側の「設定と進捗」タブで練習設定を入力し、「練習を開始」してください。")
 
 
     # --- 7. AIからの最初の誘いを生成し表示 (ロジック分岐) ---
     if st.session_state.get("new_session_flag", False):
         
         st.session_state.new_session_flag = False 
-        scenario_text = f"**ユーザーが設定したシナリオ:** {st.session_state.current_scenario}"
+        
+        # ★★★ 修正箇所: シナリオ入力が空欄の場合の処理 ★★★
+        scenario_input_value = st.session_state.current_scenario
+        
+        if not scenario_input_value:
+            # 入力がない場合、AIにランダム生成を指示するテキストをセット
+            scenario_text = "**ユーザーはシナリオを指定しませんでした。ターゲット層（大学1年〜新卒1年）に合った、断りにくい誘いを一つ自動で設定してください。**"
+        else:
+            scenario_text = f"**ユーザーが設定したシナリオ:** {scenario_input_value}"
+        # ---------------------------------------------------
         
         element_key_for_prompt = next((key for key in training_elements if st.session_state.selected_element_display in key), None)
         
@@ -447,8 +462,8 @@ elif st.session_state.current_view == view_options[1]: # "2. ロールプレイ�
                 st.session_state.chat_history.append({"role": "assistant", "content": initial_response.text})
                 st.session_state.initial_prompt_sent = True
                 
-                # View維持
-                st.session_state.current_view = view_options[1]
+                # 実践タブに維持
+                st.session_state.main_tabs_container = tab_titles[1] 
                 st.rerun()
         else:
             st.error("プロンプトの生成に失敗しました。設定を見直してください。")
@@ -502,19 +517,19 @@ elif st.session_state.current_view == view_options[1]: # "2. ロールプレイ�
     st.markdown("---")
     
     # 「新しいシナリオで練習する」ボタン
-    if st.button("🔄 新しい練習を始める（設定・進捗画面へ戻る）", key="reset_and_go_to_settings"):
+    if st.button("🔄 新しい練習を始める（設定・進捗タブへ戻る）", key="reset_and_go_to_settings"):
         st.session_state.chat_history = []
         st.session_state.genai_chat = model.start_chat(history=[])
         st.session_state.initial_prompt_sent = False
         st.session_state.current_scenario = None
         st.session_state.selected_element_display = "総合実践"
         
-        # ★★★ 修正箇所: 設定 View に戻る ★★★
-        st.session_state.current_view = view_options[0] # "1. 設定と進捗"
+        # 設定タブに戻る
+        st.session_state.main_tabs_container = tab_titles[0] # "1. 設定と進捗"
         scroll_to_top()
         st.rerun()
         
-    if st.button("✅ 現在の会話履歴を保存", key="save_button_view2"):
+    if st.button("✅ 現在の会話履歴を保存", key="save_button_tab2"):
         if st.session_state.chat_history:
             save_chat_history(st.session_state.chat_history, user_id)
         else:
@@ -522,10 +537,9 @@ elif st.session_state.current_view == view_options[1]: # "2. ロールプレイ�
 
 
 # ==============================================================================
-# VIEW 3: 履歴と分析
+# TAB 3: 履歴と分析
 # ==============================================================================
-elif st.session_state.current_view == view_options[2]: # "3. 履歴と分析"
-
+with tab3:
     st.subheader("📚 これまでの練習履歴")
 
     all_histories = load_all_chat_histories(user_id)
@@ -547,12 +561,12 @@ elif st.session_state.current_view == view_options[2]: # "3. 履歴と分析"
                 if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
                     delete_chat_history(log['session_id'], user_id)
                     
-                    # View維持
-                    st.session_state.current_view = view_options[2]
+                    # 履歴タブに維持
+                    st.session_state.main_tabs_container = tab_titles[2] # "3. 履歴と分析"
                     st.rerun()
                     
     st.markdown("---")
-    if st.button("すべての要素の進捗をリセット (研究用)", key="full_reset_button_view3"):
+    if st.button("すべての要素の進捗をリセット (研究用)", key="full_reset_button_tab3"):
         st.session_state.element_status = {key: False for key in training_elements.keys()}
         progress_file_path = get_user_files(user_id)["progress"]
         if os.path.exists(progress_file_path):
@@ -563,7 +577,7 @@ elif st.session_state.current_view == view_options[2]: # "3. 履歴と分析"
         st.session_state.initial_prompt_sent = False
         st.session_state.selected_element_display = "総合実践"
         
-        # ★★★ 修正箇所: 設定 View に戻る ★★★
-        st.session_state.current_view = view_options[0] # "1. 設定と進捗"
+        # 設定タブに戻る
+        st.session_state.main_tabs_container = tab_titles[0] # "1. 設定と進捗"
         st.info(f"ID: {user_id} の進捗がリセットされました。")
         st.rerun()
