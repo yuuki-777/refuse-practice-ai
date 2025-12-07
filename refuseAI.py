@@ -100,6 +100,17 @@ def highlight_text(text):
 model = genai.GenerativeModel('models/gemini-pro-latest')
 
 
+# --- スクロール機能のヘルパー関数 (修正版: トップへ戻るのみ) ---
+def scroll_to_top():
+    """ページトップにスクロールするためのJavaScriptを注入する"""
+    js = """
+    <script>
+        window.parent.document.querySelector('section.main').scrollTo(0, 0);
+    </script>
+    """
+    st.markdown(js, unsafe_allow_html=True)
+# --- scroll_to_element は削除 ---
+
 # --- 3. Streamlitアプリのタイトル設定 ---
 st.title("誘いを断る練習AI")
 st.write("断ることが苦手なあなたのための、コミュニケーション練習アプリです。AIからの誘いを断ってみましょう！")
@@ -234,32 +245,6 @@ def create_focused_prompt(element_key, element_description):
 """
     return focused_prompt
 
-# --- スクロール機能のヘルパー関数 ---
-def scroll_to_top():
-    """ページトップにスクロールするためのJavaScriptを注入する"""
-    js = """
-    <script>
-        window.parent.document.querySelector('section.main').scrollTo(0, 0);
-    </script>
-    """
-    st.markdown(js, unsafe_allow_html=True)
-    
-def scroll_to_element(element_id):
-    """指定されたIDの要素にスクロールするためのJavaScriptを注入する"""
-    # 特定のIDを持つ要素（練習設定サブヘッダー）の場所にスクロールさせる
-    js = f"""
-    <script>
-        var element = window.parent.document.querySelector('[data-testid="stSubheader"]');
-        if (element) {{
-            element.scrollIntoView({{behavior: "smooth", block: "start"}});
-        }} else {{
-            # 要素が見つからない場合はトップに戻る
-             window.parent.document.querySelector('section.main').scrollTo(0, 0);
-        }}
-    </script>
-    """
-    st.markdown(js, unsafe_allow_html=True)
-
 
 # --- 4. UIの配置とモード選択 ---
 
@@ -276,11 +261,19 @@ if "chat_history" not in st.session_state or "user_id" not in st.session_state o
     
     # 要素別トレーニングの合格状況をファイルからロードする
     st.session_state.element_status = load_element_progress(training_elements, user_id) 
+    
+    # スクロール制御の初期化
+    st.session_state.scroll_to_top_flag = False
 
 
 # --- UI制御 ---
-# ★★★ 練習設定サブヘッダーにIDを付与（スクロールターゲット） ★★★
 st.subheader("📝 練習設定")
+
+# ★★★ スクロール処理の実行 ★★★
+if st.session_state.scroll_to_top_flag:
+    scroll_to_top() 
+    st.session_state.scroll_to_top_flag = False
+# ---------------------------------
 
 # 練習モードの選択 (ロック機能の実装)
 all_elements_passed = all(st.session_state.element_status.values())
@@ -500,8 +493,9 @@ if st.button("🔄 新しい練習を始める（設定エリアへ戻る）", k
     st.session_state.current_scenario = None
     st.session_state.selected_element_display = "総合実践"
     
-    # 練習設定のサブヘッダーにスクロール
-    scroll_to_element("練習設定")
+    # ★★★ 修正箇所: 練習設定のサブヘッダーにスクロール ★★★
+    # JavaScriptの競合を避けるため、ページトップへの確実なスクロールに変更
+    st.session_state.scroll_to_top_flag = True
     st.rerun()
     
 if st.button("✅ 現在の会話履歴を保存", key="save_button_view2"):
