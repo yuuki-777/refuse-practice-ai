@@ -234,7 +234,7 @@ def create_focused_prompt(element_key, element_description):
 """
     return focused_prompt
 
-# --- スクロール機能のヘルパー関数 (UI改善の名残として維持) ---
+# --- スクロール機能のヘルパー関数 ---
 def scroll_to_top():
     """ページトップにスクロールするためのJavaScriptを注入する"""
     js = """
@@ -246,13 +246,14 @@ def scroll_to_top():
     
 def scroll_to_element(element_id):
     """指定されたIDの要素にスクロールするためのJavaScriptを注入する"""
+    # 特定のIDを持つ要素（練習設定サブヘッダー）の場所にスクロールさせる
     js = f"""
     <script>
-        var element = window.parent.document.getElementById('{element_id}');
+        var element = window.parent.document.querySelector('[data-testid="stSubheader"]');
         if (element) {{
             element.scrollIntoView({{behavior: "smooth", block: "start"}});
         }} else {{
-            # 要素が見つからない場合はトップに戻る
+            // 要素が見つからない場合はトップに戻る
              window.parent.document.querySelector('section.main').scrollTo(0, 0);
         }}
     </script>
@@ -278,6 +279,7 @@ if "chat_history" not in st.session_state or "user_id" not in st.session_state o
 
 
 # --- UI制御 ---
+# ★★★ 練習設定サブヘッダーにIDを付与（スクロールターゲット） ★★★
 st.subheader("📝 練習設定")
 
 # 練習モードの選択 (ロック機能の実装)
@@ -376,8 +378,7 @@ if st.button("▶️ 練習を開始する", disabled=start_button_disabled, key
     
     st.session_state.selected_element_display = current_selected_element_display
     
-    # 画面トップにスクロールして会話エリアへ誘導
-    scroll_to_top() 
+    # スクロールロジックは会話エリアの直後に誘導
     st.rerun()
 
 
@@ -499,7 +500,8 @@ if st.button("🔄 新しい練習を始める（設定エリアへ戻る）", k
     st.session_state.current_scenario = None
     st.session_state.selected_element_display = "総合実践"
     
-    scroll_to_top()
+    # ★★★ 修正箇所: 練習設定のサブヘッダーにスクロール ★★★
+    scroll_to_element("練習設定")
     st.rerun()
     
 if st.button("✅ 現在の会話履歴を保存", key="save_button_view2"):
