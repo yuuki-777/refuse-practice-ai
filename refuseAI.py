@@ -5,7 +5,7 @@ import time
 import json
 import uuid
 import re
-import base64 # 自動スクロール機能用
+import base64 
 
 # --- 1. APIキーの設定 ---
 if "GOOGLE_API_KEY" in st.secrets:
@@ -268,14 +268,20 @@ if "chat_history" not in st.session_state or "user_id" not in st.session_state o
     st.session_state.initial_prompt_sent = False
     st.session_state.current_scenario = None
     st.session_state.user_id = user_id 
+    st.session_state.selected_element_display = "総合実践" # 初期値を設定
+    st.session_state.new_session_flag = False # 新しいセッション開始フラグ
     
     # 要素別トレーニングの合格状況をファイルからロードする
     st.session_state.element_status = load_element_progress(training_elements, user_id) 
 
 
 # --- 画面のタブ分割 ---
-# UIがわかりにくい、完全なスクロール型ではなく複数画面に分けた方が見やすいという指摘に対応
-tab1, tab2, tab3 = st.tabs(["1. 設定と進捗", "2. ロールプレイング実践", "3. 履歴と分析"])
+tab_titles = ["1. 設定と進捗", "2. ロールプレイング実践", "3. 履歴と分析"]
+# アクティブタブを制御するロジック
+if 'active_tab' not in st.session_state:
+    st.session_state.active_tab = 0
+
+tab1, tab2, tab3 = st.tabs(tab_titles, st.session_state.active_tab)
 
 
 # ==============================================================================
@@ -310,6 +316,7 @@ with tab1:
 
     if not all_elements_passed and practice_mode == '総合実践 (ロック中)':
         practice_mode = '要素別トレーニング (一点集中)'
+        st.session_state.selected_element_display = "総合実践"
 
     # 課題解消：要素ポイントが会話履歴の下に埋もれる問題
     st.markdown("---")
@@ -318,6 +325,7 @@ with tab1:
     
     element_keys = list(training_elements.keys())
     
+    selected_element = ""
     for i, key in enumerate(element_keys):
         passed = st.session_state.element_status[key]
         icon = "✅" if passed else "❌"
@@ -328,7 +336,7 @@ with tab1:
 
     st.markdown("---")
 
-    selected_element = ""
+    current_selected_element_display = "総合実践"
     if practice_mode == '要素別トレーニング (一点集中)':
         st.info("💡 現在、要素別トレーニングモードです。")
         available_elements = [k for k, v in st.session_state.element_status.items() if not v]
@@ -339,20 +347,29 @@ with tab1:
 
         if not key_options:
             selected_element = list(training_elements.keys())[0]
+            current_selected_element_display = selected_element.split(' (')[0]
         else:
+            # 選択肢のデフォルト値を調整
+            default_index = 0
+            # 過去に選択した要素を記憶していればそれをデフォルトにするロジックをここで追加することも可能
             selected_display_text = st.selectbox(
                 "▼ 集中して練習する要素を選択",
                 display_options,
+                index=default_index,
                 key='training_element_select_display'
             )
             selected_element_index = display_options.index(selected_display_text)
             selected_element = key_options[selected_element_index]
+            current_selected_element_display = selected_element.split(' (')[0]
 
 
     # ユーザーがシナリオを入力するUI
     st.markdown("### 2. シナリオの入力")
+    
+    # 課題解消: シナリオ入力の説明強化
+    st.info("💡 **入力例:** 'サークルの先輩、週末の飲み会、断りにくさ：中'\nまたは '新卒の教育担当、急な残業の依頼、断りにくさ：高'")
     scenario_input = st.text_area(
-        "誘い手、断りにくさのレベル、具体的な誘いのテーマ（例：サークルの先輩、飲み会、断りにくさ中）を入力してください。",
+        "誘い手（誰から）、誘いの内容、断りにくさのレベル（低・中・高）を具体的に入力してください。",
         height=100,
         key="scenario_input"
     )
@@ -361,7 +378,20 @@ with tab1:
     
     # 「練習を開始する」ボタンはタブ2への誘導も兼ねる
     if st.button("▶️ 練習を開始し、実践画面へ進む", disabled=start_button_disabled, key="start_button_tab1"):
-        # セッション状態にタブ切り替えを要求
+        
+        # 既存の会話履歴をクリア
+        st.session_state.chat_history = []
+        st.session_state.genai_chat = model.start_chat(history=[])
+        
+        # 新しいセッション用のフラグと状態をセット
+        st.session_state.initial_prompt_sent = False
+        st.session_state.current_scenario = scenario_input
+        st.session_state.new_session_flag = True # 新しいセッション開始をトリガーするフラグ
+        
+        # 実践画面での表示用に選択要素名を保存
+        st.session_state.selected_element_display = current_selected_element_display
+        
+        # タブを実践画面に切り替え、再実行
         st.session_state.active_tab = 1 
         st.rerun()
 
@@ -372,45 +402,54 @@ with tab1:
 with tab2:
     st.subheader("🗣️ ロールプレイング実践エリア")
     
-    # 課題解消: 練習中のシチュエーション切り替わり防止
-    # 練習開始後に scenario_input が変更されても、ここで初期化されないように制御
-    
+    # --- 課題1への対応: 選択中の要素をロールプレイング画面で確認できるようにする ---
     if st.session_state.get("current_scenario") and st.session_state.initial_prompt_sent:
-        st.info(f"現在の練習設定: **{st.session_state.current_scenario}** (モード: {practice_mode})")
+        
+        # 表示用のテキストを生成
+        mode_name = "総合実践 (全要素評価)"
+        element_name = ""
+        display_text = st.session_state.get("selected_element_display")
+        
+        if display_text and display_text != "総合実践":
+            mode_name = f"要素別トレーニング"
+            element_name = f" | 目標: **{display_text}**"
+            
+        st.markdown(f"**練習モード:** {mode_name}{element_name}")
+        st.info(f"シチュエーション: **{st.session_state.current_scenario}**")
     else:
         st.warning("左側の「設定と進捗」タブで練習設定を入力し、「練習を開始」してください。")
+    # --------------------------------------------------------------------------
 
 
     # --- 7. AIからの最初の誘いを生成し表示 (ロジック分岐) ---
-    # ロジックを微修正: ユーザー入力後に勝手にセッションリセットされないようにする
-    if (st.session_state.get("current_scenario") != scenario_input or (st.session_state.get("start_button_tab1") or st.session_state.get("start_button"))) and not st.session_state.initial_prompt_sent:
+    # new_session_flag が True の場合のみ、初期プロンプトを生成
+    if st.session_state.get("new_session_flag", False):
         
-        st.session_state.chat_history = []
-        st.session_state.genai_chat = model.start_chat(history=[])
+        st.session_state.new_session_flag = False # フラグをすぐにリセット
+        scenario_text = f"**ユーザーが設定したシナリオ:** {st.session_state.current_scenario}"
         
-        scenario_text = f"**ユーザーが設定したシナリオ:** {scenario_input}"
+        # 選択中の要素を取得（Tab1で設定された current_selected_element_display を使用して、元の要素キーを逆引き）
+        element_key_for_prompt = next((key for key in training_elements if st.session_state.selected_element_display in key), None)
         
-        if practice_mode == '要素別トレーニング (一点集中)':
-            element_key_for_prompt = selected_element 
-            if element_key_for_prompt:
-                combined_prompt = create_focused_prompt(element_key_for_prompt, training_elements[element_key_for_prompt])
-                combined_prompt += f"\n\n{scenario_text}"
-            else:
-                combined_prompt = "" 
-            
-        else: # 総合実践 (全要素を評価)
-            combined_prompt = f"{SYSTEM_PROMPT_FULL_TEMPLATE}\n\n{scenario_text}"
+        if st.session_state.selected_element_display != "総合実践" and element_key_for_prompt:
+            combined_prompt = create_focused_prompt(element_key_for_prompt, training_elements[element_key_for_prompt])
+            combined_prompt += f"\n\n{scenario_text}"
+        elif st.session_state.selected_element_display == "総合実践":
+             combined_prompt = f"{SYSTEM_PROMPT_FULL_TEMPLATE}\n\n{scenario_text}"
+        else:
+             combined_prompt = "" 
         
         if combined_prompt:
             with st.spinner("AIが誘いを考えています..."):
                 initial_response = st.session_state.genai_chat.send_message(combined_prompt)
                 st.session_state.chat_history.append({"role": "assistant", "content": initial_response.text})
                 st.session_state.initial_prompt_sent = True
-                st.session_state.current_scenario = scenario_input
+                
                 # タブを実践画面に固定
                 st.session_state.active_tab = 1 
                 st.rerun()
         else:
+            st.error("プロンプトの生成に失敗しました。設定を見直してください。")
             st.stop()
 
 
@@ -435,18 +474,21 @@ with tab2:
             response_text = ai_response.text
 
             # 合否判定チェック
-            if practice_mode == '要素別トレーニング (一点集中)' and selected_element:
+            if st.session_state.selected_element_display != "総合実践":
                 match = re.search(r"【合否判定】:\s*(合格|不合格)", response_text)
                 
-                if match and match.group(1) == "合格":
-                    current_element_key = selected_element
-                    if not st.session_state.element_status[current_element_key]:
-                        st.session_state.element_status[current_element_key] = True
-                        save_element_progress(st.session_state.element_status, user_id)
-                        response_text += "\n\n🎉 **おめでとうございます！この要素を合格しました。** 次の要素に進むか、すべての要素合格後に総合実践に挑戦しましょう！"
-                
-                response_text = response_text.replace("【合否判定】: 合格", "**【合否判定】: <span style='color:green;'>合格</span>**")
-                response_text = response_text.replace("【合否判定】: 不合格", "**【合否判定】: <span style='color:red;'>不合格</span>**")
+                if match:
+                    # element_key_for_prompt を再取得
+                    current_element_key = next((key for key in training_elements if st.session_state.selected_element_display in key), None)
+                    
+                    if current_element_key and match.group(1) == "合格":
+                        if not st.session_state.element_status[current_element_key]:
+                            st.session_state.element_status[current_element_key] = True
+                            save_element_progress(st.session_state.element_status, user_id)
+                            response_text += "\n\n🎉 **おめでとうございます！この要素を合格しました。** 次の要素に進むか、すべての要素合格後に総合実践に挑戦しましょう！"
+                    
+                    response_text = response_text.replace("【合否判定】: 合格", "**【合否判定】: <span style='color:green;'>合格</span>**")
+                    response_text = response_text.replace("【合否判定】: 不合格", "**【合否判定】: <span style='color:red;'>不合格</span>**")
 
 
             st.session_state.chat_history.append({"role": "assistant", "content": response_text})
@@ -459,12 +501,12 @@ with tab2:
     st.markdown("---")
     
     # 課題解消: 「新しいシナリオで練習する」を選択したときに、自分で上に戻って設定しなおすのが見つけにくかった。
-    # ラベルを明確にし、設定タブに戻るロジックを実装
     if st.button("🔄 新しい練習を始める（設定・進捗タブへ戻る）", key="reset_and_go_to_settings"):
         st.session_state.chat_history = []
         st.session_state.genai_chat = model.start_chat(history=[])
         st.session_state.initial_prompt_sent = False
         st.session_state.current_scenario = None
+        st.session_state.selected_element_display = "総合実践"
         st.session_state.active_tab = 0 # 設定タブに戻る
         scroll_to_top() # 画面トップにスクロール
         st.rerun()
@@ -514,10 +556,8 @@ with tab3:
         st.session_state.genai_chat = model.start_chat(history=[])
         st.session_state.initial_prompt_sent = False
         st.session_state.current_scenario = None
+        st.session_state.selected_element_display = "総合実践"
         st.info(f"ID: {user_id} の進捗がリセットされました。")
         st.session_state.active_tab = 0 # 設定タブに戻る
         st.rerun()
-
-# 最後に、アクティブなタブを制御するロジックを配置
-if 'active_tab' in st.session_state:
-    st.session_state.active_tab = st.session_state.active_tab
+    
