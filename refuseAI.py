@@ -253,7 +253,7 @@ def scroll_to_element(element_id):
         if (element) {{
             element.scrollIntoView({{behavior: "smooth", block: "start"}});
         }} else {{
-            // 要素が見つからない場合はトップに戻る
+            # 要素が見つからない場合はトップに戻る
              window.parent.document.querySelector('section.main').scrollTo(0, 0);
         }}
     </script>
@@ -500,7 +500,7 @@ if st.button("🔄 新しい練習を始める（設定エリアへ戻る）", k
     st.session_state.current_scenario = None
     st.session_state.selected_element_display = "総合実践"
     
-    # ★★★ 修正箇所: 練習設定のサブヘッダーにスクロール ★★★
+    # 練習設定のサブヘッダーにスクロール
     scroll_to_element("練習設定")
     st.rerun()
     
