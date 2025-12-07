@@ -129,11 +129,6 @@ training_elements = {
     "相手への配慮 (感謝の言葉など) (1点)": "内容面：相手の誘い自体を否定せず、感謝の言葉があるか。",
 }
 
-# --- 画面のタブ名定義 (定義位置を移動) ---
-tab_titles = ["1. 設定と進捗", "2. ロールプレイング実践", "3. 履歴と分析"]
-# ----------------------------------------
-
-
 # --- 6. システムプロンプトの設定 (テンプレート) ---
 
 # --- 総合実践モード用の詳細なプロンプトテンプレート ---
@@ -239,7 +234,7 @@ def create_focused_prompt(element_key, element_description):
 """
     return focused_prompt
 
-# --- スクロール機能のヘルパー関数 ---
+# --- スクロール機能のヘルパー関数 (UI改善の名残として維持) ---
 def scroll_to_top():
     """ページトップにスクロールするためのJavaScriptを注入する"""
     js = """
@@ -282,302 +277,276 @@ if "chat_history" not in st.session_state or "user_id" not in st.session_state o
     st.session_state.element_status = load_element_progress(training_elements, user_id) 
 
 
-# --- 画面のタブ分割 ---
-# タブキーの初期化を st.tabs 呼び出しの直前に移動
-if "main_tabs_container" not in st.session_state:
-    st.session_state.main_tabs_container = tab_titles[0] # 初期値を設定タブの名称に設定
+# --- UI制御 ---
+st.subheader("📝 練習設定")
+
+# 練習モードの選択 (ロック機能の実装)
+all_elements_passed = all(st.session_state.element_status.values())
+
+if all_elements_passed:
+    st.success("🎉 すべての要素を合格しました！総合実践モードが解放されました。")
+    mode_options = ('総合実践 (全要素を評価)', '要素別トレーニング (一点集中)')
+else:
+    st.warning("総合実践は、すべての要素別トレーニング（6要素）を合格後に解放されます。")
+    mode_options = ('総合実践 (ロック中)', '要素別トレーニング (一点集中)')
+
+initial_index = 1 
+if 'practice_mode_select' in st.session_state:
+    try:
+        initial_index = mode_options.index(st.session_state.practice_mode_select)
+    except ValueError:
+        initial_index = 1
+
+practice_mode = st.radio(
+    "1. 練習モードを選択してください:",
+    mode_options,
+    index=initial_index,
+    key='practice_mode_select'
+)
+
+if not all_elements_passed and practice_mode == '総合実践 (ロック中)':
+    practice_mode = '要素別トレーニング (一点集中)'
+    st.session_state.selected_element_display = "総合実践"
+
+# 要素ポイントの表示 (Expanderで常に開閉可能にする)
+st.markdown("---")
+st.markdown("### 🏆 要素別トレーニングの進捗と目標")
+st.info("練習したい要素をクリックして、目標を確認してください。")
+
+element_keys = list(training_elements.keys())
+
+selected_element = ""
+for i, key in enumerate(element_keys):
+    passed = st.session_state.element_status[key]
+    icon = "✅" if passed else "❌"
+    
+    with st.expander(f"{icon} **{key.split(' (')[0]}**"):
+        st.markdown(f"**目標**:\n- {training_elements[key]}")
+
+st.markdown("---")
+
+current_selected_element_display = "総合実践"
+if practice_mode == '要素別トレーニング (一点集中)':
+    st.info("💡 現在、要素別トレーニングモードです。")
+    available_elements = [k for k, v in st.session_state.element_status.items() if not v]
+    passed_elements = [k for k, v in st.session_state.element_status.items() if v]
+    
+    display_options = available_elements + [f"{e} (✅ 合格済み)" for e in passed_elements]
+    key_options = available_elements + passed_elements
+
+    if not key_options:
+        selected_element = list(training_elements.keys())[0]
+        current_selected_element_display = selected_element.split(' (')[0]
+    else:
+        default_index = 0
+        selected_display_text = st.selectbox(
+            "▼ 集中して練習する要素を選択",
+            display_options,
+            index=default_index,
+            key='training_element_select_display'
+        )
+        selected_element_index = display_options.index(selected_display_text)
+        selected_element = key_options[selected_element_index]
+        current_selected_element_display = selected_element.split(' (')[0]
+
+
+# ユーザーがシナリオを入力するUI
+st.markdown("### 2. シナリオの入力 (オプション)")
+
+# 課題解消: シナリオ入力の説明強化 ＆ 必須解除
+st.info("💡 **希望するシナリオがない場合は空欄のまま**で構いません。空欄の場合、AIが自動でシナリオを生成します。")
+scenario_input = st.text_area(
+    "【任意】誘い手（誰から）、誘いの内容、断りにくさのレベル（低・中・高）を具体的に入力してください。",
+    height=100,
+    key="scenario_input"
+)
+
+# シナリオ入力が空欄でもボタンを有効にする
+start_button_disabled = (practice_mode == '要素別トレーニング (一点集中)' and not selected_element)
+
+# 「練習を開始する」ボタン
+if st.button("▶️ 練習を開始する", disabled=start_button_disabled, key="start_button_main"):
+    
+    st.session_state.chat_history = []
+    st.session_state.genai_chat = model.start_chat(history=[])
+    
+    st.session_state.initial_prompt_sent = False
+    st.session_state.current_scenario = scenario_input.strip() # 入力がない場合は空文字列を渡す
+    st.session_state.new_session_flag = True
+    
+    st.session_state.selected_element_display = current_selected_element_display
+    
+    # 画面トップにスクロールして会話エリアへ誘導
+    scroll_to_top() 
+    st.rerun()
+
+
+st.markdown("---")
+st.subheader("🗣️ ロールプレイング実践エリア")
 # --------------------------------------------------------------------------
 
-# st.tabs の呼び出し
-tabs = st.tabs(tab_titles, key="main_tabs_container")
-
-# 展開処理はリスト変数に対して行う
-tab1 = tabs[0]
-tab2 = tabs[1]
-tab3 = tabs[2]
-
-
-# ==============================================================================
-# TAB 1: 設定と進捗 (設定と要素ポイントの確認)
-# ==============================================================================
-with tab1:
-    st.subheader("📝 練習設定と要素別トレーニングの進捗")
+# --- 課題解消: 選択中の要素をロールプレイング画面で確認できるようにする ---
+if st.session_state.get("current_scenario") is not None and st.session_state.initial_prompt_sent:
     
-    # 練習モードの選択 (ロック機能の実装)
-    all_elements_passed = all(st.session_state.element_status.values())
+    mode_name = "総合実践 (全要素評価)"
+    element_name = ""
+    display_text = st.session_state.get("selected_element_display")
     
-    if all_elements_passed:
-        st.success("🎉 すべての要素を合格しました！総合実践モードが解放されました。")
-        mode_options = ('総合実践 (全要素を評価)', '要素別トレーニング (一点集中)')
+    if display_text and display_text != "総合実践":
+        mode_name = f"要素別トレーニング"
+        element_name = f" | 目標: **{display_text}**"
+        
+    st.markdown(f"**練習モード:** {mode_name}{element_name}")
+    
+    # シナリオ入力が空の場合の表示を調整
+    scenario_display = st.session_state.current_scenario if st.session_state.current_scenario else "AIがランダムに設定"
+    st.info(f"シチュエーション: **{scenario_display}**")
+    
+else:
+    st.warning("「練習設定」エリアで設定を入力し、「練習を開始」ボタンを押してください。")
+
+
+# --- 7. AIからの最初の誘いを生成し表示 (ロジック分岐) ---
+if st.session_state.get("new_session_flag", False):
+    
+    st.session_state.new_session_flag = False 
+    
+    # シナリオ入力が空欄の場合の処理
+    scenario_input_value = st.session_state.current_scenario
+    
+    if not scenario_input_value:
+        # 入力がない場合、AIにランダム生成を指示するテキストをセット
+        scenario_text = "**ユーザーはシナリオを指定しませんでした。ターゲット層（大学1年〜新卒1年）に合った、断りにくい誘いを一つ自動で設定してください。**"
     else:
-        st.warning("総合実践は、すべての要素別トレーニング（6要素）を合格後に解放されます。")
-        mode_options = ('総合実践 (ロック中)', '要素別トレーニング (一点集中)')
-
-    initial_index = 1 
-    if 'practice_mode_select' in st.session_state:
-        try:
-            initial_index = mode_options.index(st.session_state.practice_mode_select)
-        except ValueError:
-            initial_index = 1
-
-    practice_mode = st.radio(
-        "1. 練習モードを選択してください:",
-        mode_options,
-        index=initial_index,
-        key='practice_mode_select'
-    )
-
-    if not all_elements_passed and practice_mode == '総合実践 (ロック中)':
-        practice_mode = '要素別トレーニング (一点集中)'
-        st.session_state.selected_element_display = "総合実践"
-
-    # 要素ポイントの表示
-    st.markdown("---")
-    st.markdown("### 🏆 要素別トレーニングの進捗と目標")
-    st.info("練習したい要素をクリックして、目標を確認してください。")
+        scenario_text = f"**ユーザーが設定したシナリオ:** {scenario_input_value}"
     
-    element_keys = list(training_elements.keys())
     
-    selected_element = ""
-    for i, key in enumerate(element_keys):
-        passed = st.session_state.element_status[key]
-        icon = "✅" if passed else "❌"
-        
-        with st.expander(f"{icon} **{key.split(' (')[0]}**"):
-            st.markdown(f"**目標**:\n- {training_elements[key]}")
-
-    st.markdown("---")
-
-    current_selected_element_display = "総合実践"
-    if practice_mode == '要素別トレーニング (一点集中)':
-        st.info("💡 現在、要素別トレーニングモードです。")
-        available_elements = [k for k, v in st.session_state.element_status.items() if not v]
-        passed_elements = [k for k, v in st.session_state.element_status.items() if v]
-        
-        display_options = available_elements + [f"{e} (✅ 合格済み)" for e in passed_elements]
-        key_options = available_elements + passed_elements
-
-        if not key_options:
-            selected_element = list(training_elements.keys())[0]
-            current_selected_element_display = selected_element.split(' (')[0]
-        else:
-            default_index = 0
-            selected_display_text = st.selectbox(
-                "▼ 集中して練習する要素を選択",
-                display_options,
-                index=default_index,
-                key='training_element_select_display'
-            )
-            selected_element_index = display_options.index(selected_display_text)
-            selected_element = key_options[selected_element_index]
-            current_selected_element_display = selected_element.split(' (')[0]
-
-
-    # ユーザーがシナリオを入力するUI
-    st.markdown("### 2. シナリオの入力 (オプション)")
+    element_key_for_prompt = next((key for key in training_elements if st.session_state.selected_element_display in key), None)
     
-    # 課題解消: シナリオ入力の説明強化 ＆ 必須解除
-    st.info("💡 **希望するシナリオがない場合は空欄のまま**で構いません。空欄の場合、AIが自動でシナリオを生成します。")
-    scenario_input = st.text_area(
-        "【任意】誘い手（誰から）、誘いの内容、断りにくさのレベル（低・中・高）を具体的に入力してください。",
-        height=100,
-        key="scenario_input"
-    )
-
-    # シナリオ入力が空欄でもボタンを有効にする
-    start_button_disabled = (practice_mode == '要素別トレーニング (一点集中)' and not selected_element)
+    if st.session_state.selected_element_display != "総合実践" and element_key_for_prompt:
+        combined_prompt = create_focused_prompt(element_key_for_prompt, training_elements[element_key_for_prompt])
+        combined_prompt += f"\n\n{scenario_text}"
+    elif st.session_state.selected_element_display == "総合実践":
+            combined_prompt = f"{SYSTEM_PROMPT_FULL_TEMPLATE}\n\n{scenario_text}"
+    else:
+            combined_prompt = "" 
     
-    # 「練習を開始する」ボタンはタブ2への誘導も兼ねる
-    if st.button("▶️ 練習を開始し、実践画面へ進む", disabled=start_button_disabled, key="start_button_tab1"):
-        
-        st.session_state.chat_history = []
-        st.session_state.genai_chat = model.start_chat(history=[])
-        
-        st.session_state.initial_prompt_sent = False
-        st.session_state.current_scenario = scenario_input.strip() # 入力がない場合は空文字列を渡す
-        st.session_state.new_session_flag = True
-        
-        st.session_state.selected_element_display = current_selected_element_display
-        
-        # タブを実践画面に切り替え、再実行
-        st.session_state.main_tabs_container = tab_titles[1] # "2. ロールプレイング実践"
-        st.rerun()
-
-
-# ==============================================================================
-# TAB 2: ロールプレイング実践 (会話エリア)
-# ==============================================================================
-with tab2:
-    st.subheader("🗣️ ロールプレイング実践エリア")
-    
-    # 課題解消: 選択中の要素をロールプレイング画面で確認できるようにする
-    if st.session_state.get("current_scenario") is not None and st.session_state.initial_prompt_sent:
-        
-        mode_name = "総合実践 (全要素評価)"
-        element_name = ""
-        display_text = st.session_state.get("selected_element_display")
-        
-        if display_text and display_text != "総合実践":
-            mode_name = f"要素別トレーニング"
-            element_name = f" | 目標: **{display_text}**"
+    if combined_prompt:
+        with st.spinner("AIが誘いを考えています..."):
+            initial_response = st.session_state.genai_chat.send_message(combined_prompt)
+            st.session_state.chat_history.append({"role": "assistant", "content": initial_response.text})
+            st.session_state.initial_prompt_sent = True
             
-        st.markdown(f"**練習モード:** {mode_name}{element_name}")
-        
-        # シナリオ入力が空の場合の表示を調整
-        scenario_display = st.session_state.current_scenario if st.session_state.current_scenario else "AIがランダムに設定"
-        st.info(f"シチュエーション: **{scenario_display}**")
-        
+            # View維持
+            st.rerun()
     else:
-        st.warning("左側の「設定と進捗」タブで練習設定を入力し、「練習を開始」してください。")
+        st.error("プロンプトの生成に失敗しました。設定を見直してください。")
+        st.stop()
 
 
-    # --- 7. AIからの最初の誘いを生成し表示 (ロジック分岐) ---
-    if st.session_state.get("new_session_flag", False):
-        
-        st.session_state.new_session_flag = False 
-        
-        # シナリオ入力が空欄の場合の処理
-        scenario_input_value = st.session_state.current_scenario
-        
-        if not scenario_input_value:
-            # 入力がない場合、AIにランダム生成を指示するテキストをセット
-            scenario_text = "**ユーザーはシナリオを指定しませんでした。ターゲット層（大学1年〜新卒1年）に合った、断りにくい誘いを一つ自動で設定してください。**"
+# --- 8. 会話履歴の表示 ---
+for message in st.session_state.chat_history:
+    with st.chat_message(message["role"]):
+        if message["role"] == "assistant":
+             st.markdown(highlight_text(message["content"]), unsafe_allow_html=True)
         else:
-            scenario_text = f"**ユーザーが設定したシナリオ:** {scenario_input_value}"
-        
-        
-        element_key_for_prompt = next((key for key in training_elements if st.session_state.selected_element_display in key), None)
-        
-        if st.session_state.selected_element_display != "総合実践" and element_key_for_prompt:
-            combined_prompt = create_focused_prompt(element_key_for_prompt, training_elements[element_key_for_prompt])
-            combined_prompt += f"\n\n{scenario_text}"
-        elif st.session_state.selected_element_display == "総合実践":
-             combined_prompt = f"{SYSTEM_PROMPT_FULL_TEMPLATE}\n\n{scenario_text}"
-        else:
-             combined_prompt = "" 
-        
-        if combined_prompt:
-            with st.spinner("AIが誘いを考えています..."):
-                initial_response = st.session_state.genai_chat.send_message(combined_prompt)
-                st.session_state.chat_history.append({"role": "assistant", "content": initial_response.text})
-                st.session_state.initial_prompt_sent = True
+             st.markdown(message["content"])
+
+# --- 9. ユーザー入力の処理 ---
+user_input = st.chat_input("あなたの断り言葉を入力してください", disabled=not st.session_state.initial_prompt_sent)
+
+if user_input:
+    st.session_state.chat_history.append({"role": "user", "content": user_input})
+    with st.chat_message("user"):
+        st.markdown(user_input)
+
+    with st.spinner("AIが返答を考えています..."):
+        ai_response = st.session_state.genai_chat.send_message(user_input)
+        response_text = ai_response.text
+
+        # 合否判定チェック
+        if st.session_state.selected_element_display != "総合実践":
+            match = re.search(r"【合否判定】:\s*(合格|不合格)", response_text)
+            
+            if match:
+                current_element_key = next((key for key in training_elements if st.session_state.selected_element_display in key), None)
                 
-                # 実践タブに維持
-                st.session_state.main_tabs_container = tab_titles[1] 
-                st.rerun()
-        else:
-            st.error("プロンプトの生成に失敗しました。設定を見直してください。")
-            st.stop()
-
-
-    # --- 8. 会話履歴の表示 ---
-    for message in st.session_state.chat_history:
-        with st.chat_message(message["role"]):
-            if message["role"] == "assistant":
-                 st.markdown(highlight_text(message["content"]), unsafe_allow_html=True)
-            else:
-                 st.markdown(message["content"])
-
-    # --- 9. ユーザー入力の処理 ---
-    user_input = st.chat_input("あなたの断り言葉を入力してください", disabled=not st.session_state.initial_prompt_sent)
-
-    if user_input:
-        st.session_state.chat_history.append({"role": "user", "content": user_input})
-        with st.chat_message("user"):
-            st.markdown(user_input)
-
-        with st.spinner("AIが返答を考えています..."):
-            ai_response = st.session_state.genai_chat.send_message(user_input)
-            response_text = ai_response.text
-
-            # 合否判定チェック
-            if st.session_state.selected_element_display != "総合実践":
-                match = re.search(r"【合否判定】:\s*(合格|不合格)", response_text)
+                if current_element_key and match.group(1) == "合格":
+                    if not st.session_state.element_status[current_element_key]:
+                        st.session_state.element_status[current_element_key] = True
+                        save_element_progress(st.session_state.element_status, user_id)
+                        response_text += "\n\n🎉 **おめでとうございます！この要素を合格しました。** 次の要素に進むか、すべての要素合格後に総合実践に挑戦しましょう！"
                 
-                if match:
-                    current_element_key = next((key for key in training_elements if st.session_state.selected_element_display in key), None)
-                    
-                    if current_element_key and match.group(1) == "合格":
-                        if not st.session_state.element_status[current_element_key]:
-                            st.session_state.element_status[current_element_key] = True
-                            save_element_progress(st.session_state.element_status, user_id)
-                            response_text += "\n\n🎉 **おめでとうございます！この要素を合格しました。** 次の要素に進むか、すべての要素合格後に総合実践に挑戦しましょう！"
-                    
-                    response_text = response_text.replace("【合否判定】: 合格", "**【合否判定】: <span style='color:green;'>合格</span>**")
-                    response_text = response_text.replace("【合否判定】: 不合格", "**【合否判定】: <span style='color:red;'>不合格</span>**")
+                response_text = response_text.replace("【合否判定】: 合格", "**【合否判定】: <span style='color:green;'>合格</span>**")
+                response_text = response_text.replace("【合否判定】: 不合格", "**【合否判定】: <span style='color:red;'>不合格</span>**")
 
 
-            st.session_state.chat_history.append({"role": "assistant", "content": response_text})
-            with st.chat_message("assistant"):
-                st.markdown(highlight_text(response_text), unsafe_allow_html=True)
+        st.session_state.chat_history.append({"role": "assistant", "content": response_text})
+        with st.chat_message("assistant"):
+            st.markdown(highlight_text(response_text), unsafe_allow_html=True)
 
-        time.sleep(1)
-        st.rerun()
+    time.sleep(1)
+    st.rerun()
 
-    st.markdown("---")
+st.markdown("---")
+st.subheader("✅ データ管理")
+
+# 「新しいシナリオで練習する」ボタン
+if st.button("🔄 新しい練習を始める（設定エリアへ戻る）", key="reset_and_go_to_settings"):
+    st.session_state.chat_history = []
+    st.session_state.genai_chat = model.start_chat(history=[])
+    st.session_state.initial_prompt_sent = False
+    st.session_state.current_scenario = None
+    st.session_state.selected_element_display = "総合実践"
     
-    # 「新しいシナリオで練習する」ボタン
-    if st.button("🔄 新しい練習を始める（設定・進捗タブへ戻る）", key="reset_and_go_to_settings"):
-        st.session_state.chat_history = []
-        st.session_state.genai_chat = model.start_chat(history=[])
-        st.session_state.initial_prompt_sent = False
-        st.session_state.current_scenario = None
-        st.session_state.selected_element_display = "総合実践"
-        
-        # 設定タブに戻る
-        st.session_state.main_tabs_container = tab_titles[0] # "1. 設定と進捗"
-        scroll_to_top()
-        st.rerun()
-        
-    if st.button("✅ 現在の会話履歴を保存", key="save_button_tab2"):
-        if st.session_state.chat_history:
-            save_chat_history(st.session_state.chat_history, user_id)
-        else:
-            st.warning("保存する会話履歴がありません。")
-
-
-# ==============================================================================
-# TAB 3: 履歴と分析
-# ==============================================================================
-with tab3:
-    st.subheader("📚 これまでの練習履歴")
-
-    all_histories = load_all_chat_histories(user_id)
-
-    if not all_histories:
-        st.info("まだ保存された練習履歴はありません。")
+    scroll_to_top()
+    st.rerun()
+    
+if st.button("✅ 現在の会話履歴を保存", key="save_button_view2"):
+    if st.session_state.chat_history:
+        save_chat_history(st.session_state.chat_history, user_id)
     else:
-        for i, log in enumerate(reversed(all_histories)):
-            with st.expander(f"セッション: {log['timestamp']} (ID: {log['session_id'][-4:]})"):
-                for message in log["history"]:
-                    if message["role"] == "assistant" and "あなたはユーザーが誘いを断る練習をするためのロールプレイング相手です。" in message["content"]:
-                        continue 
-                    with st.chat_message(message["role"]):
-                        if message["role"] == "assistant":
-                            st.markdown(highlight_text(message["content"]), unsafe_allow_html=True)
-                        else:
-                            st.markdown(message["content"])
+        st.warning("保存する会話履歴がありません。")
 
-                if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
-                    delete_chat_history(log['session_id'], user_id)
-                    
-                    # 履歴タブに維持
-                    st.session_state.main_tabs_container = tab_titles[2] # "3. 履歴と分析"
-                    st.rerun()
-                    
-    st.markdown("---")
-    if st.button("すべての要素の進捗をリセット (研究用)", key="full_reset_button_tab3"):
-        st.session_state.element_status = {key: False for key in training_elements.keys()}
-        progress_file_path = get_user_files(user_id)["progress"]
-        if os.path.exists(progress_file_path):
-            os.remove(progress_file_path)
 
-        st.session_state.chat_history = []
-        st.session_state.genai_chat = model.start_chat(history=[])
-        st.session_state.initial_prompt_sent = False
-        st.session_state.selected_element_display = "総合実践"
-        
-        # 設定タブに戻る
-        st.session_state.main_tabs_container = tab_titles[0] # "1. 設定と進捗"
-        st.info(f"ID: {user_id} の進捗がリセットされました。")
-        st.rerun()
+# ==============================================================================
+# 履歴と分析 (画面下部に配置)
+# ==============================================================================
+st.markdown("---")
+st.subheader("📚 これまでの練習履歴")
+
+all_histories = load_all_chat_histories(user_id)
+
+if not all_histories:
+    st.info("まだ保存された練習履歴はありません。")
+else:
+    for i, log in enumerate(reversed(all_histories)):
+        with st.expander(f"セッション: {log['timestamp']} (ID: {log['session_id'][-4:]})"):
+            for message in log["history"]:
+                if message["role"] == "assistant" and "あなたはユーザーが誘いを断る練習をするためのロールプレイング相手です。" in message["content"]:
+                    continue 
+                with st.chat_message(message["role"]):
+                    if message["role"] == "assistant":
+                        st.markdown(highlight_text(message["content"]), unsafe_allow_html=True)
+                    else:
+                        st.markdown(message["content"])
+
+            if st.button(f"このセッションを削除 ({log['session_id'][-4:]})", key=f"delete_btn_{log['session_id']}"):
+                delete_chat_history(log['session_id'], user_id)
+                st.rerun()
+                
+st.markdown("---")
+if st.button("すべての要素の進捗をリセット (研究用)", key="full_reset_button_view3"):
+    st.session_state.element_status = {key: False for key in training_elements.keys()}
+    progress_file_path = get_user_files(user_id)["progress"]
+    if os.path.exists(progress_file_path):
+        os.remove(progress_file_path)
+
+    st.session_state.chat_history = []
+    st.session_state.genai_chat = model.start_chat(history=[])
+    st.session_state.initial_prompt_sent = False
+    st.session_state.selected_element_display = "総合実践"
+    
+    st.info(f"ID: {user_id} の進捗がリセットされました。")
+    scroll_to_top()
+    st.rerun()
