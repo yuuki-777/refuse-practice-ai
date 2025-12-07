@@ -129,28 +129,9 @@ training_elements = {
     "相手への配慮 (感謝の言葉など) (1点)": "内容面：相手の誘い自体を否定せず、感謝の言葉があるか。",
 }
 
-# --- 4. UIの配置とモード選択 ---
-# --- セッションステートの初期化 ---
-
-# ★★★ 修正箇所: セッションステート初期化のロジックを分離 ★★★
-# Streamlitの実行順序でキーが確定するように制御
-if "chat_history" not in st.session_state or "user_id" not in st.session_state or st.session_state.user_id != user_id:
-    
-    st.session_state.chat_history = []
-    st.session_state.genai_chat = model.start_chat(history=[])
-    st.session_state.initial_prompt_sent = False
-    st.session_state.current_scenario = None
-    st.session_state.user_id = user_id 
-    st.session_state.selected_element_display = "総合実践"
-    st.session_state.new_session_flag = False
-    
-    # 要素別トレーニングの合格状況をファイルからロードする
-    st.session_state.element_status = load_element_progress(training_elements, user_id) 
-
-# タブキーの初期化は、リセット時と初回起動時の両方で、確実に実行されるように分離
-if "main_tabs_container" not in st.session_state:
-    st.session_state.main_tabs_container = tab_titles[0] # 初期値を設定タブの名称に設定
-# --------------------------------------------------------------------------
+# --- 画面のタブ名定義 (定義位置を移動) ---
+tab_titles = ["1. 設定と進捗", "2. ロールプレイング実践", "3. 履歴と分析"]
+# ----------------------------------------
 
 
 # --- 6. システムプロンプトの設定 (テンプレート) ---
@@ -302,9 +283,7 @@ if "chat_history" not in st.session_state or "user_id" not in st.session_state o
 
 
 # --- 画面のタブ分割 ---
-tab_titles = ["1. 設定と進捗", "2. ロールプレイング実践", "3. 履歴と分析"]
-
-# ★★★ 最終修正箇所: タブキーの初期化を st.tabs 呼び出しの直前に移動 ★★★
+# タブキーの初期化を st.tabs 呼び出しの直前に移動
 if "main_tabs_container" not in st.session_state:
     st.session_state.main_tabs_container = tab_titles[0] # 初期値を設定タブの名称に設定
 # --------------------------------------------------------------------------
@@ -405,7 +384,7 @@ with tab1:
         key="scenario_input"
     )
 
-    # ★★★ 修正箇所: シナリオ入力が空欄でもボタンを有効にする ★★★
+    # シナリオ入力が空欄でもボタンを有効にする
     start_button_disabled = (practice_mode == '要素別トレーニング (一点集中)' and not selected_element)
     
     # 「練習を開始する」ボタンはタブ2への誘導も兼ねる
