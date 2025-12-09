@@ -18,7 +18,7 @@ else:
 LOGS_DIR = "user_data"
 
 def get_user_files(user_id):
-    """ユーザーIDに基づいてチャットログと進捗ログのパスを生成"""
+   """ユーザーIDに基づいてチャットログと進捗ログのパスを生成"""
     if not os.path.exists(LOGS_DIR):
         os.makedirs(LOGS_DIR, exist_ok=True)
     return {
@@ -574,6 +574,7 @@ if st.button("すべての要素の進捗をリセット (研究用)", key="full
     st.info(f"ID: {user_id} の進捗がリセットされました。")
     scroll_to_top()
     st.rerun()
+
 
 
 
