@@ -5,7 +5,7 @@ import time
 import json
 import uuid
 import re
-import base64 
+import base64
 
 # --- 1. APIキーの設定 ---
 if "GOOGLE_API_KEY" in st.secrets:
@@ -15,8 +15,7 @@ else:
     st.stop()
 
 # --- ログファイルのディレクトリ設定 ---
-LOGS_DIR = "user_data" 
-STUDY_LOG_FILE = "study_logs.json" # 学習時間ログのファイル名定義
+LOGS_DIR = "user_data"
 
 def get_user_files(user_id):
     """ユーザーIDに基づいてチャットログと進捗ログのパスを生成"""
@@ -24,11 +23,10 @@ def get_user_files(user_id):
         os.makedirs(LOGS_DIR, exist_ok=True)
     return {
         "chat": os.path.join(LOGS_DIR, f"chat_logs_{user_id}.json"),
-        "progress": os.path.join(LOGS_DIR, f"element_progress_{user_id}.json"),
-        "study_log": os.path.join(LOGS_DIR, f"study_logs_{user_id}.json") # ★新規追加★
+        "progress": os.path.join(LOGS_DIR, f"element_progress_{user_id}.json")
     }
 
-# --- 進捗のロード/セーブ関数 (既存) ---
+# --- 進捗のロード/セーブ関数 ---
 def load_element_progress(training_elements, user_id):
     """進捗ファイルを読み込む。ない場合や破損時は初期状態を返す。"""
     file_path = get_user_files(user_id)["progress"]
@@ -49,59 +47,7 @@ def save_element_progress(status, user_id):
         json.dump(status, f, ensure_ascii=False, indent=4)
 
 
-# --- ★新規追加★ 学習時間記録関数 ---
-def save_study_session(user_id, start_time, end_time):
-    """セッションの開始と終了時刻から学習時間を計算し、ログに追記する"""
-    if not start_time or not end_time:
-        return
-
-    duration = int(end_time - start_time)
-    date_key = time.strftime("%Y-%m-%d", time.localtime(start_time))
-    
-    file_path = get_user_files(user_id)["study_log"]
-    logs = {}
-    
-    # 既存のログを読み込む
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as f:
-            try:
-                logs = json.load(f)
-            except json.JSONDecodeError:
-                logs = {}
-
-    if date_key not in logs:
-        logs[date_key] = 0
-    
-    # 当日の合計学習時間に加算
-    logs[date_key] += duration
-
-    # ログを書き戻す
-    with open(file_path, "w", encoding="utf-8") as f:
-        json.dump(logs, f, ensure_ascii=False, indent=4)
-
-# --- ★新規追加★ 学習時間表示関数 ---
-def load_today_study_time(user_id):
-    """当日の合計学習時間（秒）をロードし、分単位で返す"""
-    file_path = get_user_files(user_id)["study_log"]
-    today_key = time.strftime("%Y-%m-%d")
-    
-    if os.path.exists(file_path):
-        with open(file_path, "r", encoding="utf-8") as f:
-            try:
-                logs = json.load(f)
-                total_seconds = logs.get(today_key, 0)
-                # 現在のセッションの経過時間を追加
-                if st.session_state.get('session_start_time'):
-                    current_duration = time.time() - st.session_state.session_start_time
-                    total_seconds += current_duration
-                    
-                return int(total_seconds // 60) # 分単位で返す
-            except json.JSONDecodeError:
-                return 0
-    return 0
-
-
-# --- 履歴管理関数 (既存) ---
+# --- 履歴管理関数 ---
 def save_chat_history(history, user_id):
     file_path = get_user_files(user_id)["chat"]
     if os.path.exists(file_path):
@@ -142,7 +88,7 @@ def delete_chat_history(session_id_to_delete, user_id):
     st.success("履歴を削除しました！")
 
 
-# --- テキストの強調表示処理関数 (既存) ---
+# --- テキストの強調表示処理関数 ---
 def highlight_text(text):
     """AIが出力する太字斜体下線マークアップ（_**...**_）を赤色に変換する"""
     highlighted = text.replace("_**", '<span style="color:red; font-weight:bold; text-decoration: underline;">')
@@ -150,11 +96,11 @@ def highlight_text(text):
     return highlighted
 
 
-# --- 2. モデルの選択 (既存) ---
+# --- 2. モデルの選択 ---
 model = genai.GenerativeModel('models/gemini-pro-latest')
 
 
-# --- スクロール機能のヘルパー関数 (既存) ---
+# --- スクロール機能のヘルパー関数 (修正版: トップへ戻るのみ) ---
 def scroll_to_top():
     """ページトップにスクロールするためのJavaScriptを注入する"""
     js = """
@@ -164,17 +110,9 @@ def scroll_to_top():
     """
     st.markdown(js, unsafe_allow_html=True)
 
-# --- ログアウト関数 (修正: 学習時間記録を追加) ---
+# --- ログアウト関数を追加 ---
 def logout_user():
     """セッション情報をクリアし、強制的にアプリを初期状態に戻す"""
-    # ★学習時間記録★ ログアウト（終了）時間を記録
-    if st.session_state.get('user_id'):
-        save_study_session(
-            st.session_state.user_id,
-            st.session_state.get('session_start_time'),
-            time.time()
-        )
-    
     # ユーザーIDをクリア
     if "user_id" in st.session_state:
         del st.session_state["user_id"]
@@ -186,8 +124,7 @@ def logout_user():
                       "current_scenario", "selected_element_display",
                       "new_session_flag", "element_status",
                       "scroll_to_top_flag", "practice_mode_select",
-                      "training_element_select_display",
-                      "session_start_time"] # ★開始時刻もクリア★
+                      "training_element_select_display"]
     for key in keys_to_delete:
         if key in st.session_state:
             del st.session_state[key]
@@ -214,7 +151,7 @@ if not user_id_input:
     st.info("練習を開始するには、まずユーザーIDを入力してください。")
     st.stop()
 
-user_id = user_id_input 
+user_id = user_id_input
 
 
 # --- 練習要素の定義 (要素別トレーニング用: 6要素) ---
@@ -226,34 +163,6 @@ training_elements = {
     "代替案の提示の有無と適切さ (1点)": "内容面：別の機会や方法を提案しているか。",
     "相手への配慮 (感謝の言葉など) (1点)": "内容面：相手の誘い自体を否定せず、感謝の言葉があるか。",
 }
-
-# --- 4. UIの配置とモード選択 ---
-
-# --- セッションステートの初期化 ---
-if "chat_history" not in st.session_state or "user_id" not in st.session_state or st.session_state.user_id != user_id:
-    
-    st.session_state.chat_history = []
-    st.session_state.genai_chat = model.start_chat(history=[])
-    st.session_state.initial_prompt_sent = False
-    st.session_state.current_scenario = None
-    st.session_state.user_id = user_id
-    st.session_state.selected_element_display = "総合実践"
-    st.session_state.new_session_flag = False
-    
-    # ★新規追加★ ログイン（開始）時刻を記録
-    st.session_state.session_start_time = time.time()
-    
-    # 要素別トレーニングの合格状況をファイルからロードする
-    st.session_state.element_status = load_element_progress(training_elements, user_id)
-    
-    # スクロール制御の初期化
-    st.session_state.scroll_to_top_flag = False
-
-# --- ★新規追加★ 本日の学習時間の表示 ---
-today_time_in_minutes = load_today_study_time(user_id)
-st.markdown(f"**⏰ 本日の学習時間: {today_time_in_minutes} 分**")
-# ----------------------------------------
-
 
 # --- 6. システムプロンプトの設定 (テンプレート) ---
 
@@ -299,7 +208,7 @@ SYSTEM_PROMPT_FULL_TEMPLATE = f"""
 - 理由の提示の有無と適切さ: 1点
 - 代替案の提示の有無と適切さ: 1点
 - 相手への配慮: 相手の誘い自体を否定せず、感謝の言葉があるか：1点
-- 内容の一貫性: 1点 
+- 内容の一貫性: 1点
 
 # 表現面（詳細）
 - **評価**: 表現面で加点・減点された点を、具体的な言葉遣いに言及しながら説明してください。
@@ -374,9 +283,6 @@ if "chat_history" not in st.session_state or "user_id" not in st.session_state o
     st.session_state.selected_element_display = "総合実践"
     st.session_state.new_session_flag = False
     
-    # ★新規追加★ ログイン（開始）時刻を記録
-    st.session_state.session_start_time = time.time()
-    
     # 要素別トレーニングの合格状況をファイルからロードする
     st.session_state.element_status = load_element_progress(training_elements, user_id)
     
@@ -387,7 +293,7 @@ if "chat_history" not in st.session_state or "user_id" not in st.session_state o
 # --- UI制御 ---
 st.subheader("📝 練習設定")
 
-# スクロール処理の実行
+# ★★★ スクロール処理の実行 ★★★
 if st.session_state.scroll_to_top_flag:
     scroll_to_top()
     st.session_state.scroll_to_top_flag = False
@@ -603,7 +509,7 @@ if user_input:
 st.markdown("---")
 st.subheader("✅ データ管理")
 
-# 「新しい練習を始める」ボタン
+# 「新しいシナリオで練習する」ボタン
 if st.button("🔄 新しい練習を始める（設定エリアへ戻る）", key="reset_and_go_to_settings"):
     st.session_state.chat_history = []
     st.session_state.genai_chat = model.start_chat(history=[])
@@ -624,20 +530,7 @@ if st.button("✅ 現在の会話履歴を保存", key="save_button_view2"):
 # ログアウトボタン
 st.markdown("---")
 if st.button("🚪 ログアウト", key="logout_button"):
-    
-    # ログアウト関数を呼び出す
-    keys_to_delete = ["user_id", "user_id_key", "chat_history", "genai_chat", "initial_prompt_sent", 
-                      "current_scenario", "selected_element_display", 
-                      "new_session_flag", "element_status", 
-                      "scroll_to_top_flag", "practice_mode_select",
-                      "training_element_select_display"] 
-    for key in keys_to_delete:
-        if key in st.session_state:
-            del st.session_state[key]
-            
-    st.info("ログアウトします。ユーザーIDを再入力してください。")
-    time.sleep(0.5) 
-    st.rerun()
+    logout_user()
 
 
 # ==============================================================================
@@ -655,7 +548,7 @@ else:
         with st.expander(f"セッション: {log['timestamp']} (ID: {log['session_id'][-4:]})"):
             for message in log["history"]:
                 if message["role"] == "assistant" and "あなたはユーザーが誘いを断る練習をするためのロールプレイング相手です。" in message["content"]:
-                    continue 
+                    continue
                 with st.chat_message(message["role"]):
                     if message["role"] == "assistant":
                         st.markdown(highlight_text(message["content"]), unsafe_allow_html=True)
