@@ -597,8 +597,8 @@ if user_input:
 st.markdown("---")
 st.subheader("✅ データ管理")
 
-# 「新しい練習を始める」ボタン
-if st.button("🔄 新しい練習を始める（設定エリアへ戻る）", key="reset_and_go_to_settings"):
+# 「新しい設定で練習を始める」ボタン
+if st.button("🔄 新しい設定で練習を始める", key="reset_and_go_to_settings"):
     st.session_state.chat_history = []
     st.session_state.genai_chat = model.start_chat(history=[])
     st.session_state.initial_prompt_sent = False
@@ -664,4 +664,5 @@ if st.button("すべての要素の進捗をリセット (研究用)", key="full
     st.info(f"ID: {user_id} の進捗がリセットされました。")
     scroll_to_top()
     st.rerun()
+
 
