@@ -444,53 +444,73 @@ if not all_elements_passed and practice_mode == '総合実践 (ロック中)':
 # 要素ポイントの表示 (Expanderで常に開閉可能にする)
 st.markdown("---")
 st.markdown("### 🏆 要素別トレーニングの進捗と目標")
-st.info("練習したい要素をクリックして、目標を確認してください。")
 
-element_keys = list(training_elements.keys())
+# 選択アクションがあったかどうかをチェックする変数
+element_selection_made = False
 
-# --- 1. 目標確認のための Expander リスト ---
+# --- 1. 目標確認と選択ボタンの統合 ---
+# 選択された要素を一時的に保持するためのキーを定義
+ELEMENT_SELECT_KEY = 'selected_element_for_practice'
+
 for i, key in enumerate(element_keys):
     passed = st.session_state.element_status[key]
     icon = "✅" if passed else "❌"
     
-    with st.expander(f"{icon} **{key.split(' (')[0]}**"):
+    # 要素名（点数除く）
+    element_name_simple = key.split(' (')[0]
+    
+    # 現在この要素が選択中かどうかをチェック
+    is_current_selection = (st.session_state.get('selected_element_display') == element_name_simple)
+    
+    # 選択中の要素はExpanderを強制的に開く
+    expander_label = f"{icon} **{element_name_simple}**"
+    if is_current_selection:
+        expander_label += " (✨ 現在の目標)"
+    
+    with st.expander(expander_label, expanded=is_current_selection):
         st.markdown(f"**目標**:\n- {training_elements[key]}")
+        
+        # 集中モードが選択されている場合のみボタンを表示
+        if practice_mode == '要素別トレーニング (一点集中)':
+            
+            # ボタンが押された場合の処理を定義するクロージャ (ボタンのキーが競合しないようにする)
+            def handle_element_selection(selected_key, display_name):
+                st.session_state[ELEMENT_SELECT_KEY] = selected_key
+                st.session_state.selected_element_display = display_name
+                st.info(f"目標を **'{display_name}'** に設定しました。")
+                st.rerun()
+
+            # ボタンのキーが個々にユニークであることを保証
+            button_key = f"select_{i}_{key.replace(' ', '_')}"
+            
+            if st.button("この要素を選択する", key=button_key, disabled=is_current_selection):
+                handle_element_selection(key, element_name_simple)
+                element_selection_made = True
+
 
 st.markdown("---")
 
+# --- 2. 選択された要素をセッションステートに反映し、メインロジックで使用可能にする ---
 current_selected_element_display = "総合実践"
-selected_element = ""
+selected_element = None
 
-# --- 2. 集中して練習する要素を選択する UI ---
-if practice_mode == '要素別トレーニング (一点集中)':
-    st.info("💡 現在、要素別トレーニングモードです。リストから練習する要素を選んでください。")
-    
-    available_elements = [k for k, v in st.session_state.element_status.items()]
-    
-    # 表示用のシンプルな選択肢を生成
-    display_options_simple = [key.split(' (')[0] for key in available_elements]
-    
-    # 選択肢のデフォルト値を調整
-    default_index = 0
-    
-    selected_display_text = st.selectbox(
-        "▼ 集中して練習する要素を選択",
-        display_options_simple,
-        index=default_index,
-        key='training_element_select_display'
-    )
-    
-    # 選択された表示テキストから、元のキー（例: "相手との関係性に応じた適切さ (1点)"）を逆引き
-    # ここで元のキーを正確に取得するロジックを再構築
-    selected_element = next((key for key in training_elements if selected_display_text in key), None)
-    
-    if selected_element:
-        current_selected_element_display = selected_element.split(' (')[0]
-
-# 総合実践モードの場合、特に選択肢は不要
-else:
-    st.info("💡 現在、総合実践モードです。全ての評価項目（6要素）が評価対象となります。")
+# ロジックの最上部で初期化
+if practice_mode == '総合実践 (全要素を評価)' or practice_mode == '総合実践 (ロック中)':
+    st.session_state[ELEMENT_SELECT_KEY] = None
     current_selected_element_display = "総合実践"
+    
+elif st.session_state.get(ELEMENT_SELECT_KEY) is not None:
+    # ボタンで選択された値がセッションステートにある場合
+    selected_element = st.session_state[ELEMENT_SELECT_KEY]
+    current_selected_element_display = st.session_state.selected_element_display
+    
+    st.success(f"✅ 選択中の集中要素: **{current_selected_element_display}**")
+    
+# 要素別モードが選択されているのに要素が未選択の場合
+elif practice_mode == '要素別トレーニング (一点集中)' and not element_selection_made:
+    st.warning("☝️ 上のリストから、集中して練習する要素を一つ選択してください。")
+
+# --- 選択UIの統合終了 ---
 
 # ユーザーがシナリオを入力するUI
 st.markdown("### 2. シナリオの入力 (オプション)")
@@ -699,5 +719,6 @@ if st.button("すべての要素の進捗をリセット (研究用)", key="full
     st.info(f"ID: {user_id} の進捗がリセットされました。")
     scroll_to_top()
     st.rerun()
+
 
 
