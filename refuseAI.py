@@ -445,6 +445,9 @@ if not all_elements_passed and practice_mode == '総合実践 (ロック中)':
 st.markdown("---")
 st.markdown("### 🏆 要素別トレーニングの進捗と目標")
 
+# 修正: element_keys をここで定義する
+element_keys = list(training_elements.keys())
+
 # 選択アクションがあったかどうかをチェックする変数
 element_selection_made = False
 
@@ -484,8 +487,11 @@ for i, key in enumerate(element_keys):
             button_key = f"select_{i}_{key.replace(' ', '_')}"
             
             if st.button("この要素を選択する", key=button_key, disabled=is_current_selection):
-                handle_element_selection(key, element_name_simple)
+                # クロージャを使って選択処理を実行
+                st.session_state[ELEMENT_SELECT_KEY] = key
+                st.session_state.selected_element_display = element_name_simple
                 element_selection_made = True
+                st.rerun() # ★ここで再実行をトリガーする★
 
 
 st.markdown("---")
@@ -507,9 +513,15 @@ elif st.session_state.get(ELEMENT_SELECT_KEY) is not None:
     st.success(f"✅ 選択中の集中要素: **{current_selected_element_display}**")
     
 # 要素別モードが選択されているのに要素が未選択の場合
-elif practice_mode == '要素別トレーニング (一点集中)' and not element_selection_made:
+# (再実行時に element_selection_made はリセットされるため、このチェックは不要だが、
+#  st.session_state[ELEMENT_SELECT_KEY] が None の場合に警告を表示する)
+elif practice_mode == '要素別トレーニング (一点集中)' and st.session_state.get(ELEMENT_SELECT_KEY) is None:
     st.warning("☝️ 上のリストから、集中して練習する要素を一つ選択してください。")
-
+    
+    # 選択されていない場合は、ダミーとして最初の要素を割り当てておく
+    selected_element = element_keys[0] if element_keys else None
+    
+    
 # --- 選択UIの統合終了 ---
 
 # ユーザーがシナリオを入力するUI
@@ -719,6 +731,7 @@ if st.button("すべての要素の進捗をリセット (研究用)", key="full
     st.info(f"ID: {user_id} の進捗がリセットされました。")
     scroll_to_top()
     st.rerun()
+
 
 
 
