@@ -443,54 +443,54 @@ if not all_elements_passed and practice_mode == '総合実践 (ロック中)':
 
 # 要素ポイントの表示 (Expanderで常に開閉可能にする)
 st.markdown("---")
-st.markdown("### 🏆 要素別トレーニングの選択と目標確認")
+st.markdown("### 🏆 要素別トレーニングの進捗と目標")
+st.info("練習したい要素をクリックして、目標を確認してください。")
 
-current_selected_element_display = "総合実践"
+element_keys = list(training_elements.keys())
 
-# 要素別トレーニングのロジック
-if practice_mode == '要素別トレーニング (一点集中)':
-    st.info("💡 現在、要素別トレーニングモードです。リストから目標を確認し、集中して練習する要素を選んでください。")
+# --- 1. 目標確認のための Expander リスト ---
+for i, key in enumerate(element_keys):
+    passed = st.session_state.element_status[key]
+    icon = "✅" if passed else "❌"
     
-    # 選択肢の生成: [アイコン] [要素名] - [目標の要約]
-    display_options_map = {}
-    key_options = []
-    
-    # 未合格と合格済みの要素を分離して処理
-    available_elements = [k for k, v in st.session_state.element_status.items() if not v]
-    passed_elements = [k for k, v in st.session_state.element_status.items() if v]
-
-    for key_list, icon in zip([available_elements, passed_elements], ["❌", "✅"]):
-        for key in key_list:
-            # 目標の要約 (例: "表現面：相手との関係性に応じた適切な言葉遣い、敬語...")
-            goal_summary = training_elements[key].split('：')[-1].strip()
-            
-            display_text = f"{icon} {key.split(' (')[0]} - {goal_summary}"
-            
-            key_options.append(key)
-            display_options_map[display_text] = key
-
-    if not key_options:
-        # すべて合格済みの場合
-        selected_element = list(training_elements.keys())[0]
-        current_selected_element_display = selected_element.split(' (')[0]
-        selected_display_text = "（すべての要素を合格しました）"
-    else:
-        # 選択肢の表示
-        selected_display_text = st.selectbox(
-            "▼ 集中して練習する要素を選択",
-            list(display_options_map.keys()),
-            key='training_element_select_display'
-        )
-        # 選択された表示テキストから、元のキー（例: "相手との関係性に応じた適切さ (1点)"）を逆引き
-        selected_element = display_options_map[selected_display_text]
-        current_selected_element_display = selected_element.split(' (')[0]
-
-# 総合実践モードの場合
-else:
-    st.info("💡 現在、総合実践モードです。全ての評価項目（6要素）が評価対象となります。")
-
+    with st.expander(f"{icon} **{key.split(' (')[0]}**"):
+        st.markdown(f"**目標**:\n- {training_elements[key]}")
 
 st.markdown("---")
+
+current_selected_element_display = "総合実践"
+selected_element = ""
+
+# --- 2. 集中して練習する要素を選択する UI ---
+if practice_mode == '要素別トレーニング (一点集中)':
+    st.info("💡 現在、要素別トレーニングモードです。リストから練習する要素を選んでください。")
+    
+    available_elements = [k for k, v in st.session_state.element_status.items()]
+    
+    # 表示用のシンプルな選択肢を生成
+    display_options_simple = [key.split(' (')[0] for key in available_elements]
+    
+    # 選択肢のデフォルト値を調整
+    default_index = 0
+    
+    selected_display_text = st.selectbox(
+        "▼ 集中して練習する要素を選択",
+        display_options_simple,
+        index=default_index,
+        key='training_element_select_display'
+    )
+    
+    # 選択された表示テキストから、元のキー（例: "相手との関係性に応じた適切さ (1点)"）を逆引き
+    # ここで元のキーを正確に取得するロジックを再構築
+    selected_element = next((key for key in training_elements if selected_display_text in key), None)
+    
+    if selected_element:
+        current_selected_element_display = selected_element.split(' (')[0]
+
+# 総合実践モードの場合、特に選択肢は不要
+else:
+    st.info("💡 現在、総合実践モードです。全ての評価項目（6要素）が評価対象となります。")
+    current_selected_element_display = "総合実践"
 
 # ユーザーがシナリオを入力するUI
 st.markdown("### 2. シナリオの入力 (オプション)")
@@ -699,4 +699,5 @@ if st.button("すべての要素の進捗をリセット (研究用)", key="full
     st.info(f"ID: {user_id} の進捗がリセットされました。")
     scroll_to_top()
     st.rerun()
+
 
