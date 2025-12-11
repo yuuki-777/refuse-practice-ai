@@ -24,7 +24,7 @@ def get_user_files(user_id):
     return {
         "chat": os.path.join(LOGS_DIR, f"chat_logs_{user_id}.json"),
         "progress": os.path.join(LOGS_DIR, f"element_progress_{user_id}.json"),
-        # ★学習時間ログのパスを削除★
+        "study_log": os.path.join(LOGS_DIR, f"study_logs_{user_id}.json")
     }
 
 # --- 進捗のロード/セーブ関数 (既存) ---
@@ -48,6 +48,56 @@ def save_element_progress(status, user_id):
         json.dump(status, f, ensure_ascii=False, indent=4)
 
 
+# --- 学習時間記録関数 (既存) ---
+def save_study_session(user_id, start_time, end_time):
+    """セッションの開始と終了時刻から学習時間を計算し、ログに追記する"""
+    if not start_time or not end_time:
+        return
+
+    duration = int(end_time - start_time)
+    date_key = time.strftime("%Y-%m-%d", time.localtime(start_time))
+    
+    file_path = get_user_files(user_id)["study_log"]
+    logs = {}
+    
+    # 既存のログを読み込む
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            try:
+                logs = json.load(f)
+            except json.JSONDecodeError:
+                logs = {}
+
+    if date_key not in logs:
+        logs[date_key] = 0
+    
+    # 当日の合計学習時間に加算
+    logs[date_key] += duration
+
+    # ログを書き戻す
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(logs, f, ensure_ascii=False, indent=4)
+
+# --- 学習時間表示関数 (既存) ---
+def load_today_study_time(user_id):
+    """当日の合計学習時間（秒）をロードし、分単位で返す"""
+    file_path = get_user_files(user_id)["study_log"]
+    today_key = time.strftime("%Y-%m-%d")
+    
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as f:
+            try:
+                logs = json.load(f)
+                total_seconds = logs.get(today_key, 0)
+                # 現在のセッションの経過時間を追加
+                if st.session_state.get('session_start_time'):
+                    current_duration = time.time() - st.session_state.session_start_time
+                    total_seconds += current_duration
+                    
+                return int(total_seconds // 60) # 分単位で返す
+            except json.JSONDecodeError:
+                return 0
+    return 0
 
 
 # --- 履歴管理関数 (既存) ---
@@ -130,10 +180,16 @@ def scroll_to_element(element_id):
     st.markdown(js, unsafe_allow_html=True)
 
 
-# --- ログアウト関数 (修正: 学習時間記録を削除) ---
+# --- ログアウト関数 (既存) ---
 def logout_user():
     """セッション情報をクリアし、強制的にアプリを初期状態に戻す"""
-    # ★学習時間記録ロジックを削除★
+    # 学習時間記録: ログアウト（終了）時間を記録
+    if st.session_state.get('user_id'):
+        save_study_session(
+            st.session_state.user_id,
+            st.session_state.get('session_start_time'),
+            time.time()
+        )
     
     # ユーザーIDをクリア
     if "user_id" in st.session_state:
@@ -146,8 +202,8 @@ def logout_user():
                       "current_scenario", "selected_element_display", 
                       "new_session_flag", "element_status", 
                       "scroll_to_top_flag", "practice_mode_select",
-                      "training_element_select_display",
-                      "selected_element_for_practice"] # session_start_time を削除
+                      "training_element_select_display", "session_start_time",
+                      "selected_element_for_practice"] 
     for key in keys_to_delete:
         if key in st.session_state:
             del st.session_state[key]
@@ -173,7 +229,7 @@ with st.expander("❓ このシステムの使い方（操作ガイド）", expa
     ### 📝 ステップ別操作手順
 
     1.  **🔑 ユーザー認証**:
-        * アプリ上部の入力欄に、あなたの**学籍番号**（半角英数字）を入力してください。
+        * アプリ上部の入力欄に、あなた専用の**ユーザーID**（半角英数字）を入力してください。
         * このIDにより、あなたの**学習進捗（合格状況）**と**会話履歴**が保存・復元されます。
 
     2.  **📝 練習設定**:
@@ -191,7 +247,7 @@ with st.expander("❓ このシステムの使い方（操作ガイド）", expa
         * 要素別トレーニングでは、目標を完全に満たした場合に**合格**となります。
 
     ### ✅ データと履歴の管理
-    * **新しい練習を始める**: ボタンを押すことで現在の練習を終了し、練習する要素を変更できます。
+    * **学習時間**: アプリの上部に**本日の合計学習時間**が表示されます。
     * **会話履歴の保存**: 会話が終了したら、「✅ 現在の会話履歴を保存」ボタンを押して、会話の全文を記録できます。
     * **ログアウト**: 「🚪 ログアウト」ボタンを押すと、現在のセッションが終了します。
     """)
@@ -201,7 +257,7 @@ with st.expander("❓ このシステムの使い方（操作ガイド）", expa
 # --- ユーザーID入力セクション ---
 st.subheader("🔑 ユーザー認証と進捗のロード")
 user_id_input = st.text_input(
-    "あなたの学籍番号(半角英数字) を入力してください。進捗と履歴はこのIDで保存されます。",
+    "あなたのユーザーID (半角英数字) を入力してください。進捗と履歴はこのIDで保存されます。",
     key="user_id_key"
 )
 
@@ -349,13 +405,11 @@ if "chat_history" not in st.session_state or "user_id" not in st.session_state o
     st.session_state.selected_element_display = "総合実践"
     st.session_state.new_session_flag = False
     
-    # ★学習時間関連の初期化を削除★
+    # スクロール制御の初期化
+    st.session_state.scroll_to_top_flag = False
     
     # 要素別トレーニングの合格状況をファイルからロードする
     st.session_state.element_status = load_element_progress(training_elements, user_id) 
-    
-    # スクロール制御の初期化
-    st.session_state.scroll_to_top_flag = False
 
 
 # --- UI制御 ---
@@ -402,14 +456,11 @@ practice_mode = st.radio(
     key='practice_mode_select'
 )
 
-# ★★★ 修正後のロジック: practice_mode は常に選択肢リスト内の有効な値となる ★★★
-
+# ロックされている場合は、選択されたモードを '要素別トレーニング' に強制
 if not all_elements_passed and practice_mode == '総合実践 (全要素を評価)':
-    # このロジックは、上記で選択肢リストを制御したため、通常は到達しないが、安全のため
     practice_mode = mode_options_base[0]
     st.session_state.selected_element_display = "総合実践" # 総合実践の表示名は維持
 
-# ... 以下の要素選択ロジックへ続く
 
 # 要素ポイントの表示 (Expanderで常に開閉可能にする)
 # ★★★ 目標確認と選択ボタンの統合UI ★★★
@@ -475,8 +526,8 @@ elif st.session_state.get(ELEMENT_SELECT_KEY) is not None:
 elif practice_mode == '要素別トレーニング (一点集中)' and st.session_state.get(ELEMENT_SELECT_KEY) is None:
     st.warning("☝️ 上のリストから、集中して練習する要素を一つ選択してください。")
     
-    # 選択されていない場合は、ダミーとして最初の要素を割り当てておく
-    selected_element = element_keys[0] if element_keys else None
+    # 選択されていない場合は、要素別トレーニングの開始を不可にするため、selected_elementはNoneのままにする
+    selected_element = None
     
 # ★★★ 統合UI終了 ★★★
 
@@ -621,8 +672,8 @@ if user_input:
 st.markdown("---")
 st.subheader("✅ データ管理")
 
-# 「新しい設定で練習を始める」ボタン
-if st.button("🔄 新しい設定で練習を始める", key="reset_and_go_to_settings"):
+# 「新しい練習を始める」ボタン
+if st.button("🔄 新しい練習を始める（設定エリアへ戻る）", key="reset_and_go_to_settings"):
     st.session_state.chat_history = []
     st.session_state.genai_chat = model.start_chat(history=[])
     st.session_state.initial_prompt_sent = False
@@ -638,6 +689,15 @@ if st.button("✅ 現在の会話履歴を保存", key="save_button_view2"):
         save_chat_history(st.session_state.chat_history, user_id)
     else:
         st.warning("保存する会話履歴がありません。")
+
+# デバッグ用全要素合格ボタン
+if st.button("✅ 全要素を合格にする (デバッグ用)", key="debug_complete_all_elements"):
+    # すべての要素をTrueに設定
+    st.session_state.element_status = {key: True for key in training_elements.keys()}
+    save_element_progress(st.session_state.element_status, user_id)
+    st.success("全ての要素を合格済みとして記録しました。")
+    st.rerun()
+
 
 # ログアウトボタン
 st.markdown("---")
@@ -688,7 +748,3 @@ if st.button("すべての要素の進捗をリセット (研究用)", key="full
     st.info(f"ID: {user_id} の進捗がリセットされました。")
     scroll_to_top()
     st.rerun()
-
-
-
-
