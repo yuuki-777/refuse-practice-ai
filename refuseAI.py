@@ -405,11 +405,18 @@ if "chat_history" not in st.session_state or "user_id" not in st.session_state o
     st.session_state.selected_element_display = "総合実践"
     st.session_state.new_session_flag = False
     
-    # スクロール制御の初期化
-    st.session_state.scroll_to_top_flag = False
+    # ログイン（開始）時刻を記録 (学習時間機能削除のため、この行は削除されるべきだが、以前の修正で残っていたため、ここでは削除)
     
     # 要素別トレーニングの合格状況をファイルからロードする
     st.session_state.element_status = load_element_progress(training_elements, user_id) 
+    
+    # スクロール制御の初期化
+    st.session_state.scroll_to_top_flag = False
+    # ★学習時間関連のセッション変数をクリア★
+    keys_to_clear_on_start = ["session_start_time"]
+    for key in keys_to_clear_on_start:
+        if key in st.session_state:
+            del st.session_state[key]
 
 
 # --- UI制御 ---
@@ -679,6 +686,7 @@ if st.button("🔄 新しい練習を始める（設定エリアへ戻る）", k
     st.session_state.initial_prompt_sent = False
     st.session_state.current_scenario = None
     st.session_state.selected_element_display = "総合実践"
+    st.session_state['selected_element_for_practice'] = None
     
     # 練習設定のサブヘッダーにスクロール
     st.session_state.scroll_to_top_flag = True
@@ -689,14 +697,6 @@ if st.button("✅ 現在の会話履歴を保存", key="save_button_view2"):
         save_chat_history(st.session_state.chat_history, user_id)
     else:
         st.warning("保存する会話履歴がありません。")
-
-# デバッグ用全要素合格ボタン
-if st.button("✅ 全要素を合格にする (デバッグ用)", key="debug_complete_all_elements"):
-    # すべての要素をTrueに設定
-    st.session_state.element_status = {key: True for key in training_elements.keys()}
-    save_element_progress(st.session_state.element_status, user_id)
-    st.success("全ての要素を合格済みとして記録しました。")
-    st.rerun()
 
 
 # ログアウトボタン
@@ -744,6 +744,7 @@ if st.button("すべての要素の進捗をリセット (研究用)", key="full
     st.session_state.genai_chat = model.start_chat(history=[])
     st.session_state.initial_prompt_sent = False
     st.session_state.selected_element_display = "総合実践"
+    st.session_state['selected_element_for_practice'] = None
     
     st.info(f"ID: {user_id} の進捗がリセットされました。")
     scroll_to_top()
