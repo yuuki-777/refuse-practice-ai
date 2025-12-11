@@ -370,19 +370,30 @@ if st.session_state.scroll_to_top_flag:
 # 練習モードの選択 (ロック機能の実装)
 all_elements_passed = all(st.session_state.element_status.values())
 
+# ロック状態に応じた選択肢リストの定義
+mode_options_base = ('要素別トレーニング (一点集中)',)
+
 if all_elements_passed:
     st.success("🎉 すべての要素を合格しました！総合実践モードが解放されました。")
-    mode_options = ('総合実践 (全要素を評価)', '要素別トレーニング (一点集中)')
+    # ロック解除時: 総合実践をリストの先頭に追加
+    mode_options = ('総合実践 (全要素を評価)',) + mode_options_base
 else:
     st.warning("総合実践は、すべての要素別トレーニング（6要素）を合格後に解放されます。")
-    mode_options = ('総合実践 (ロック中)', '要素別トレーニング (一点集中)')
-
-initial_index = 1
+    # ロック時: 要素別トレーニングのみ
+    mode_options = mode_options_base
+    
+# 選択肢のインデックスを維持またはリセット
+initial_index = 0
 if 'practice_mode_select' in st.session_state:
     try:
+        # ロック中に総合実践を選択していた場合を考慮して、インデックスを再計算
+        if not all_elements_passed and st.session_state.practice_mode_select == '総合実践 (全要素を評価)':
+             st.session_state.practice_mode_select = mode_options_base[0] # 要素別トレーニングに強制リセット
+        
         initial_index = mode_options.index(st.session_state.practice_mode_select)
     except ValueError:
-        initial_index = 1
+        initial_index = 0 # 見つからない場合は最初の要素に設定
+
 
 practice_mode = st.radio(
     "1. 練習モードを選択してください:",
@@ -391,9 +402,14 @@ practice_mode = st.radio(
     key='practice_mode_select'
 )
 
-if not all_elements_passed and practice_mode == '総合実践 (ロック中)':
-    practice_mode = '要素別トレーニング (一点集中)'
-    st.session_state.selected_element_display = "総合実践"
+# ★★★ 修正後のロジック: practice_mode は常に選択肢リスト内の有効な値となる ★★★
+
+if not all_elements_passed and practice_mode == '総合実践 (全要素を評価)':
+    # このロジックは、上記で選択肢リストを制御したため、通常は到達しないが、安全のため
+    practice_mode = mode_options_base[0]
+    st.session_state.selected_element_display = "総合実践" # 総合実践の表示名は維持
+
+# ... 以下の要素選択ロジックへ続く
 
 # 要素ポイントの表示 (Expanderで常に開閉可能にする)
 # ★★★ 目標確認と選択ボタンの統合UI ★★★
@@ -672,6 +688,7 @@ if st.button("すべての要素の進捗をリセット (研究用)", key="full
     st.info(f"ID: {user_id} の進捗がリセットされました。")
     scroll_to_top()
     st.rerun()
+
 
 
 
