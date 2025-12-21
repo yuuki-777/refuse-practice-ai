@@ -257,7 +257,7 @@ with st.expander("❓ このシステムの使い方（操作ガイド）", expa
 # --- ユーザーID入力セクション ---
 st.subheader("🔑 ユーザー認証と進捗のロード")
 user_id_input = st.text_input(
-    "あなたのユーザーID (半角英数字) を入力してください。進捗と履歴はこのIDで保存されます。",
+    "あなたのユーザーID （学籍番号）(半角英数字) を入力してください。進捗と履歴はこのIDで保存されます。",
     key="user_id_key"
 )
 
@@ -749,3 +749,4 @@ if st.button("すべての要素の進捗をリセット (研究用)", key="full
     st.info(f"ID: {user_id} の進捗がリセットされました。")
     scroll_to_top()
     st.rerun()
+
