@@ -698,6 +698,13 @@ if st.button("✅ 現在の会話履歴を保存", key="save_button_view2"):
     else:
         st.warning("保存する会話履歴がありません。")
 
+# デバッグ用全要素合格ボタン
+if st.button("✅ 全要素を合格にする (デバッグ用)", key="debug_complete_all_elements"):
+    # すべての要素をTrueに設定
+    st.session_state.element_status = {key: True for key in training_elements.keys()}
+    save_element_progress(st.session_state.element_status, user_id)
+    st.success("全ての要素を合格済みとして記録しました。")
+    st.rerun()
 
 # ログアウトボタン
 st.markdown("---")
@@ -749,4 +756,5 @@ if st.button("すべての要素の進捗をリセット (研究用)", key="full
     st.info(f"ID: {user_id} の進捗がリセットされました。")
     scroll_to_top()
     st.rerun()
+
 
