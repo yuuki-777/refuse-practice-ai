@@ -698,23 +698,6 @@ if st.button("✅ 現在の会話履歴を保存", key="save_button_view2"):
     else:
         st.warning("保存する会話履歴がありません。")
 
-# --- デバッグ用：特定項目のみ合格にする機能 ---
-st.markdown("---")
-with st.expander("🛠️ デバッグ設定 (特定の項目を合格にする)"):
-    debug_element_keys = list(training_elements.keys())
-    selected_debug_element = st.selectbox(
-        "合格にしたい項目を選択してください",
-        debug_element_keys,
-        key="debug_element_selector"
-    )
-    
-    if st.button("選択した項目を合格にする", key="debug_single_pass_button"):
-        # 指定した項目だけを合格(True)に書き換え
-        st.session_state.element_status[selected_debug_element] = True
-        save_element_progress(st.session_state.element_status, user_id)
-        st.success(f"項目 '{selected_debug_element.split(' (')[0]}' を合格に設定しました。")
-        time.sleep(1)
-        st.rerun()
 
 # ログアウトボタン
 st.markdown("---")
@@ -766,6 +749,7 @@ if st.button("すべての要素の進捗をリセット (研究用)", key="full
     st.info(f"ID: {user_id} の進捗がリセットされました。")
     scroll_to_top()
     st.rerun()
+
 
 
 
